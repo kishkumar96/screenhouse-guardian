@@ -1,0 +1,44 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Screen House Guardian{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <style>
+    {% block extra_style %}{% endblock %}
+  </style>
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <header class="site-header">
+    <h1>Screen House Guardian</h1>
+    <nav>
+      <a href="{% url 'home' %}">Home</a>
+      <a href="{% url 'inventory:index' %}">Inventory</a>
+      <a href="{% url 'monitoring:index' %}">Monitoring</a>
+      <a href="{% url 'dashboard:index' %}">Dashboard</a>
+      <a href="{% url 'exports:index' %}">Exports</a>
+    </nav>
+  </header>
+
+  <main class="content">
+    {% if messages %}
+      <ul class="messages">
+        {% for message in messages %}
+          <li class="{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer>
+    Screen House Guardian — Phase 1A
+  </footer>
+
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block title %}Record Observation — {{ unit.unit_code }}{% endblock %}
+
+{% block extra_style %}
+/* ── Mobile-first observation form ───────────────────────────── */
+.obs-unit-banner {
+  background: #e8f5e9;
+  border-left: 4px solid #2e7d32;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  border-radius: 0 4px 4px 0;
+}
+.obs-unit-banner h2 { margin: 0 0 0.25rem; font-size: 1.2rem; }
+.obs-unit-meta { font-size: 0.85rem; color: #555; margin: 0; }
+.obs-form-section {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+.obs-form-section h3 {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #555;
+}
+.form-group { margin-bottom: 0.9rem; }
+.form-group label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+.form-group label .required { color: #c62828; margin-left: 2px; }
+.form-group input[type=text],
+.form-group input[type=number],
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+}
+.form-group select { background: #fff; }
+.form-group textarea { resize: vertical; }
+.form-group .errorlist {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0;
+  color: #c62828;
+  font-size: 0.85rem;
+}
+.form-group input[type=file] { font-size: 0.9rem; padding: 0.3rem 0; }
+.details-toggle {
+  background: none;
+  border: none;
+  color: #2e7d32;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0;
+  margin-bottom: 0.75rem;
+  text-decoration: underline;
+}
+.details-section { display: none; }
+.details-section.open { display: block; }
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+.status-btn {
+  padding: 0.6rem 0.25rem;
+  border: 2px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: border-color 0.15s, background 0.15s;
+}
+.status-btn:hover { border-color: #2e7d32; }
+.status-btn.selected { border-color: #2e7d32; background: #e8f5e9; }
+.status-btn input[type=radio] { display: none; }
+.submit-btn {
+  display: block;
+  width: 100%;
+  padding: 0.9rem;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 1rem;
+  letter-spacing: 0.03em;
+}
+.submit-btn:hover { background: #1b5e20; }
+.non-field-errors {
+  background: #fce4ec;
+  border: 1px solid #e91e63;
+  color: #880e4f;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+{% endblock %}
+
+{% block content %}
+{# Unit context banner #}
+<div class="obs-unit-banner">
+  <h2>{{ unit.unit_code }}</h2>
+  <p class="obs-unit-meta">
+    {{ unit.crop_name }}
+    {% if unit.accession_code %} · {{ unit.accession_code }}{% endif %}
+    {% if unit.batch_code %} · {{ unit.batch_code }}{% endif %}
+    · Qty {{ unit.quantity }}
+    {% if unit.location_text %} · {{ unit.location_text }}{% endif %}
+  </p>
+  {% if latest_obs %}
+  <p class="obs-unit-meta" style="margin-top:0.3rem;">
+    Last observation: <strong>{{ latest_obs.get_status_display }}</strong>
+    &mdash; {{ latest_obs.observed_at|date:"d M Y H:i" }}
+  </p>
+  {% endif %}
+</div>
+
+<form method="post" enctype="multipart/form-data" novalidate>
+  {% csrf_token %}
+
+  {% if form.non_field_errors %}
+  <div class="non-field-errors">
+    {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+  </div>
+  {% endif %}
+
+  {# ── Status (required, prominent) ───────────────── #}
+  <div class="obs-form-section">
+    <h3>Status <span style="color:#c62828">*</span></h3>
+    <div class="status-grid" id="status-grid">
+      {% for value, label in form.status.field.choices %}
+      {% if value %}
+      <label class="status-btn {% if form.status.value == value %}selected{% endif %}">
+        <input type="radio" name="status" value="{{ value }}"
+               {% if form.status.value == value %}checked{% endif %}>
+        {{ label }}
+      </label>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% if form.status.errors %}
+    <ul class="errorlist" style="margin-top:0.5rem;">
+      {% for e in form.status.errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  {# ── Observation type ────────────────────────────── #}
+  <div class="obs-form-section">
+    <h3>Observation type</h3>
+    <div class="form-group">
+      <label for="{{ form.observation_type.id_for_label }}">
+        Type <span class="required">*</span>
+      </label>
+      {{ form.observation_type }}
+      {% if form.observation_type.errors %}
+      <ul class="errorlist">{% for e in form.observation_type.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+    <div class="form-group" id="corrects-row"
+         style="{% if form.observation_type.value != 'correction' %}display:none{% endif %}">
+      <label for="{{ form.corrects_observation.id_for_label }}">
+        Corrects observation <span class="required">*</span>
+      </label>
+      {{ form.corrects_observation }}
+      {% if form.corrects_observation.errors %}
+      <ul class="errorlist">{% for e in form.corrects_observation.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Notes ───────────────────────────────────────── #}
+  <div class="obs-form-section">
+    <h3>Notes</h3>
+    <div class="form-group">
+      {{ form.notes }}
+      {% if form.notes.errors %}
+      <ul class="errorlist">{% for e in form.notes.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Photo ───────────────────────────────────────── #}
+  <div class="obs-form-section">
+    <h3>Photo (optional)</h3>
+    <div class="form-group">
+      <label for="{{ photo_form.image.id_for_label }}">Image</label>
+      {{ photo_form.image }}
+      {% if photo_form.image.errors %}
+      <ul class="errorlist">{% for e in photo_form.image.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      <label for="{{ photo_form.caption.id_for_label }}">Caption</label>
+      {{ photo_form.caption }}
+    </div>
+  </div>
+
+  {# ── Additional detail (collapsible) ─────────────── #}
+  <button type="button" class="details-toggle" onclick="toggleDetails()">
+    + Additional detail (affected quantity, zone, conditions)
+  </button>
+  <div class="details-section obs-form-section" id="details-section">
+    <h3>Detail</h3>
+    {% for field in form.detail_fields %}
+    <div class="form-group">
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {% if field.errors %}
+      <ul class="errorlist">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <button type="submit" class="submit-btn">Save Observation</button>
+</form>
+
+<p style="text-align:center; margin-top:1rem; font-size:0.85rem;">
+  <a href="{% url 'observe_timeline' unit_code=unit.unit_code %}">View observation history</a>
+</p>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function toggleDetails() {
+  const sec = document.getElementById('details-section');
+  const btn = document.querySelector('.details-toggle');
+  sec.classList.toggle('open');
+  btn.textContent = sec.classList.contains('open')
+    ? '− Hide additional detail'
+    : '+ Additional detail (affected quantity, zone, conditions)';
+}
+
+// Status button visual selection
+document.querySelectorAll('#status-grid .status-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('#status-grid .status-btn').forEach(function(b) {
+      b.classList.remove('selected');
+    });
+    this.classList.add('selected');
+  });
+});
+
+// Show/hide corrects_observation when correction type selected
+document.getElementById('{{ form.observation_type.id_for_label }}')
+  .addEventListener('change', function() {
+    const row = document.getElementById('corrects-row');
+    row.style.display = this.value === 'correction' ? '' : 'none';
+  });
+</script>
+{% endblock %}

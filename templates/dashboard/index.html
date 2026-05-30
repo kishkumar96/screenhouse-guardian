@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — Screen House Guardian{% endblock %}
+
+{% block extra_style %}
+.dashboard-heading {
+  margin-bottom: 1.25rem;
+}
+.dashboard-heading h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.4rem;
+}
+.dashboard-heading p {
+  margin: 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+.summary-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.75rem;
+}
+.summary-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 0.9rem 1.2rem;
+  min-width: 130px;
+  flex: 1;
+}
+.summary-card .summary-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #2e7d32;
+  line-height: 1.1;
+}
+.summary-card .summary-label {
+  font-size: 0.78rem;
+  color: #666;
+  margin-top: 0.2rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.summary-card.warn .summary-value { color: #e65100; }
+.summary-card.neutral .summary-value { color: #555; }
+.section-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+  color: #333;
+}
+.units-table-wrap {
+  overflow-x: auto;
+}
+.units-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+.units-table th {
+  background: #f1f8e9;
+  color: #2e7d32;
+  text-align: left;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border-bottom: 1px solid #ddd;
+}
+.units-table td {
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+.units-table tr:last-child td { border-bottom: none; }
+.units-table tr:hover td { background: #fafafa; }
+.unit-code {
+  font-family: monospace;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #333;
+}
+.obs-status {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.status-healthy   { background: #c8e6c9; color: #1b5e20; }
+.status-watch     { background: #fff9c4; color: #f57f17; }
+.status-sick      { background: #ffe0b2; color: #e65100; }
+.status-critical  { background: #ffcdd2; color: #b71c1c; }
+.status-dead      { background: #eeeeee; color: #424242; }
+.status-recovered { background: #e1bee7; color: #4a148c; }
+.not-checked {
+  color: #aaa;
+  font-size: 0.8rem;
+  font-style: italic;
+}
+.action-links a {
+  display: inline-block;
+  font-size: 0.78rem;
+  color: #2e7d32;
+  text-decoration: none;
+  border: 1px solid #a5d6a7;
+  border-radius: 3px;
+  padding: 0.15rem 0.45rem;
+  margin-right: 0.25rem;
+  white-space: nowrap;
+}
+.action-links a:hover { background: #e8f5e9; }
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: #888;
+  font-size: 0.9rem;
+}
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-heading">
+  <h2>Active Units Dashboard</h2>
+  <p>Phase 1A — Active tracking units and latest observation status.</p>
+</div>
+
+<div class="summary-grid">
+  <div class="summary-card">
+    <div class="summary-value">{{ total_units }}</div>
+    <div class="summary-label">Active Units</div>
+  </div>
+  <div class="summary-card neutral">
+    <div class="summary-value">{{ total_quantity }}</div>
+    <div class="summary-label">Total Quantity</div>
+  </div>
+  <div class="summary-card">
+    <div class="summary-value">{{ units_with_qr }}</div>
+    <div class="summary-label">With QR Code</div>
+  </div>
+  <div class="summary-card {% if units_without_qr > 0 %}warn{% endif %}">
+    <div class="summary-value">{{ units_without_qr }}</div>
+    <div class="summary-label">Without QR Code</div>
+  </div>
+  <div class="summary-card">
+    <div class="summary-value">{{ units_checked_today }}</div>
+    <div class="summary-label">Checked Today</div>
+  </div>
+  <div class="summary-card {% if units_not_checked_7_days > 0 %}warn{% endif %}">
+    <div class="summary-value">{{ units_not_checked_7_days }}</div>
+    <div class="summary-label">Not Checked 7 Days</div>
+  </div>
+</div>
+
+<h3 class="section-heading">Active Tracking Units</h3>
+
+<div class="units-table-wrap">
+  <table class="units-table">
+    <thead>
+      <tr>
+        <th>Unit Code</th>
+        <th>Crop</th>
+        <th>Accession</th>
+        <th>Qty</th>
+        <th>Location</th>
+        <th>Status</th>
+        <th>Last Checked</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for unit in units %}
+      <tr>
+        <td class="unit-code">{{ unit.unit_code }}</td>
+        <td>{{ unit.crop_name }}</td>
+        <td>{{ unit.accession_code|default:"—" }}</td>
+        <td>{{ unit.quantity }}</td>
+        <td>{{ unit.location_text|default:"—" }}</td>
+        <td>
+          {% if unit.latest_observation %}
+            <span class="obs-status status-{{ unit.latest_observation.status }}">{{ unit.latest_observation.get_status_display }}</span>
+          {% else %}
+            <span class="not-checked">Not checked</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if unit.latest_observation %}
+            {{ unit.latest_observation.created_at|date:"d M Y" }}
+          {% else %}
+            &mdash;
+          {% endif %}
+        </td>
+        <td class="action-links">
+          <a href="{% url 'qr:label' unit_code=unit.unit_code %}">QR label</a>
+          <a href="{% url 'observe' unit_code=unit.unit_code %}">Observe</a>
+          <a href="{% url 'observe_timeline' unit_code=unit.unit_code %}">Timeline</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="8" class="empty-state">No active tracking units found.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

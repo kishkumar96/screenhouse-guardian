@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}QR Label — {{ unit.unit_code }}{% endblock %}
+
+{% block extra_style %}
+.label-card {
+  max-width: 320px;
+  margin: 1rem auto;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 1.25rem;
+  background: #fff;
+}
+.label-card h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.4rem;
+  letter-spacing: 0.05em;
+}
+.label-qr {
+  display: block;
+  width: 200px;
+  height: 200px;
+  margin: 0 auto 1rem;
+}
+.label-qr-missing {
+  width: 200px;
+  height: 200px;
+  margin: 0 auto 1rem;
+  border: 2px dashed #ccc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  font-size: 0.85rem;
+}
+.label-meta {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  border-top: 1px solid #eee;
+  padding-top: 0.75rem;
+}
+.label-meta li { margin-bottom: 0.3rem; }
+.label-meta .key { font-weight: 600; display: inline-block; min-width: 90px; }
+.scan-instruction {
+  text-align: center;
+  font-weight: 700;
+  font-size: 1rem;
+  margin: 0.75rem 0;
+  letter-spacing: 0.03em;
+}
+.label-actions { margin-top: 1rem; }
+.label-actions button {
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.label-actions button:hover { background: #1b5e20; }
+
+@media print {
+  .site-header, footer, .label-actions, nav { display: none !important; }
+  .label-card { border: none; box-shadow: none; margin: 0; padding: 0; }
+  body { background: #fff; }
+}
+{% endblock %}
+
+{% block content %}
+<div class="label-card">
+  <h2>{{ unit.unit_code }}</h2>
+
+  {% if unit.qr_code %}
+    <img class="label-qr"
+         src="{{ unit.qr_code.url }}"
+         alt="QR code for {{ unit.unit_code }}">
+  {% else %}
+    <div class="label-qr-missing">No QR code yet</div>
+  {% endif %}
+
+  <p class="scan-instruction">Scan to update status</p>
+
+  <ul class="label-meta">
+    <li><span class="key">Crop:</span> {{ unit.crop_name }}</li>
+    {% if unit.accession_code %}
+    <li><span class="key">Accession:</span> {{ unit.accession_code }}</li>
+    {% endif %}
+    {% if unit.batch_code %}
+    <li><span class="key">Batch:</span> {{ unit.batch_code }}</li>
+    {% endif %}
+    <li><span class="key">Type:</span> {{ unit.get_unit_type_display }}</li>
+    <li><span class="key">Quantity:</span> {{ unit.quantity }}</li>
+    <li><span class="key">Location:</span> {{ unit.location_text|default:"—" }}</li>
+  </ul>
+
+  <div class="label-actions">
+    <form method="post" action="{% url 'qr:generate' unit_code=unit.unit_code %}">
+      {% csrf_token %}
+      <button type="submit">
+        {% if unit.qr_code %}Regenerate QR Code{% else %}Generate QR Code{% endif %}
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

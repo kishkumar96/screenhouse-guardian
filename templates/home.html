@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Screen House Guardian — Home{% endblock %}
+
+{% block content %}
+<h2>Welcome to Screen House Guardian</h2>
+<p>QR-based screen house monitoring system.</p>
+
+<ul>
+  <li><a href="{% url 'inventory:index' %}">Inventory</a> — manage tracking units</li>
+  <li><a href="{% url 'monitoring:index' %}">Monitoring</a> — observations and quantity events</li>
+  <li><a href="{% url 'qr:index' %}">QR</a> — generate and reprint QR labels</li>
+  <li><a href="{% url 'dashboard:index' %}">Dashboard</a> — current status overview</li>
+  <li><a href="{% url 'exports:index' %}">Exports</a> — CSV and Excel exports</li>
+</ul>
+
+<p><small>Phase 1A scaffold — implementation in progress.</small></p>
+{% endblock %}

@@ -1,0 +1,22 @@
+# Screen House Guardian — Python dependencies
+# Phase 1A scaffold
+
+# Core framework
+Django>=5.2,<6.0
+djangorestframework>=3.15
+
+# Database adapter — psycopg2-binary for broad compatibility
+# Switch to psycopg[binary]>=3.1 (psycopg3) when upgrading to async or Django 5.x async views
+psycopg2-binary>=2.9
+
+# Environment variable handling — single package, do not add python-decouple
+django-environ>=0.11
+
+# Image handling (ObservationPhoto thumbnails, Phase 1A)
+Pillow>=10.0
+
+# QR code generation (Phase 1A)
+qrcode>=7.4
+
+# Excel export (Phase 1A)
+openpyxl>=3.1

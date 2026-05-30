@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}Timeline — {{ unit.unit_code }}{% endblock %}
+
+{% block extra_style %}
+.tl-unit-banner {
+  background: #e8f5e9;
+  border-left: 4px solid #2e7d32;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  border-radius: 0 4px 4px 0;
+}
+.tl-unit-banner h2 { margin: 0 0 0.2rem; font-size: 1.2rem; }
+.tl-unit-meta { font-size: 0.85rem; color: #555; margin: 0; }
+.tl-actions { margin-bottom: 1rem; }
+.tl-actions a {
+  display: inline-block;
+  background: #2e7d32;
+  color: #fff;
+  padding: 0.55rem 1.1rem;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-right: 0.5rem;
+}
+.tl-actions a:hover { background: #1b5e20; }
+.tl-actions a.secondary {
+  background: #fff;
+  color: #2e7d32;
+  border: 1px solid #2e7d32;
+}
+.tl-actions a.secondary:hover { background: #f1f8e9; }
+.obs-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: 0.9rem;
+  position: relative;
+}
+.obs-card .obs-status {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.4rem;
+}
+.status-healthy   { background:#c8e6c9; color:#1b5e20; }
+.status-watch     { background:#fff9c4; color:#f57f17; }
+.status-sick      { background:#ffe0b2; color:#e65100; }
+.status-critical  { background:#ffcdd2; color:#b71c1c; }
+.status-dead      { background:#eeeeee; color:#424242; }
+.status-recovered { background:#e1bee7; color:#4a148c; }
+.obs-card .obs-meta { font-size: 0.8rem; color: #777; margin-bottom: 0.4rem; }
+.obs-card .obs-type-badge {
+  font-size: 0.75rem;
+  background: #e3f2fd;
+  color: #0d47a1;
+  padding: 0.1rem 0.4rem;
+  border-radius: 10px;
+  margin-left: 0.4rem;
+}
+.obs-card .obs-type-badge.correction { background: #fff3e0; color: #e65100; }
+.obs-card .obs-notes { font-size: 0.9rem; margin: 0.4rem 0; }
+.obs-card .obs-detail {
+  font-size: 0.82rem;
+  color: #555;
+  margin-top: 0.5rem;
+  line-height: 1.5;
+}
+.obs-card .obs-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.obs-card .obs-photos img {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+.obs-card .corrects-ref {
+  font-size: 0.8rem;
+  color: #888;
+  margin-top: 0.4rem;
+}
+.empty-state {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #888;
+  font-size: 0.95rem;
+}
+{% endblock %}
+
+{% block content %}
+<div class="tl-unit-banner">
+  <h2>{{ unit.unit_code }}</h2>
+  <p class="tl-unit-meta">
+    {{ unit.crop_name }}
+    {% if unit.accession_code %} · {{ unit.accession_code }}{% endif %}
+    {% if unit.batch_code %} · {{ unit.batch_code }}{% endif %}
+    · Qty {{ unit.quantity }}
+    {% if unit.location_text %} · {{ unit.location_text }}{% endif %}
+  </p>
+</div>
+
+<div class="tl-actions">
+  <a href="{% url 'observe' unit_code=unit.unit_code %}">+ New observation</a>
+  <a href="{% url 'qr:label' unit_code=unit.unit_code %}" class="secondary">QR label</a>
+</div>
+
+{% if observations %}
+  {% for obs in observations %}
+  <div class="obs-card">
+    <div>
+      <span class="obs-status status-{{ obs.status }}">{{ obs.get_status_display }}</span>
+      <span class="obs-type-badge {% if obs.observation_type == 'correction' %}correction{% endif %}">
+        {{ obs.get_observation_type_display }}
+      </span>
+    </div>
+
+    <p class="obs-meta">
+      {{ obs.observed_at|date:"d M Y, H:i" }}
+      {% if obs.created_by %} &mdash; {{ obs.created_by.get_full_name|default:obs.created_by.username }}{% endif %}
+    </p>
+
+    {% if obs.notes %}
+    <p class="obs-notes">{{ obs.notes }}</p>
+    {% endif %}
+
+    {% with has_detail=obs.action_taken|add:obs.pest_signs|add:obs.disease_signs|add:obs.growth_stage|add:obs.water_condition|add:obs.affected_zone %}
+    {% if has_detail or obs.affected_quantity %}
+    <div class="obs-detail">
+      {% if obs.affected_quantity %}<span>Affected qty: <strong>{{ obs.affected_quantity }}</strong></span>{% endif %}
+      {% if obs.affected_zone %}<span> · Zone: {{ obs.affected_zone }}</span>{% endif %}
+      {% if obs.growth_stage %}<span> · Stage: {{ obs.growth_stage }}</span>{% endif %}
+      {% if obs.water_condition %}<br>Water: {{ obs.water_condition }}{% endif %}
+      {% if obs.pest_signs %}<br>Pest signs: {{ obs.pest_signs }}{% endif %}
+      {% if obs.disease_signs %}<br>Disease signs: {{ obs.disease_signs }}{% endif %}
+      {% if obs.action_taken %}<br>Action: {{ obs.action_taken }}{% endif %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    {% if obs.corrects_observation %}
+    <p class="corrects-ref">Corrects observation from {{ obs.corrects_observation.observed_at|date:"d M Y H:i" }}</p>
+    {% endif %}
+
+    {% if obs.photos.all %}
+    <div class="obs-photos">
+      {% for photo in obs.photos.all %}
+      <img src="{{ photo.image.url }}" alt="{{ photo.caption|default:'Observation photo' }}">
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty-state">
+    <p>No observations yet.</p>
+    <a href="{% url 'observe' unit_code=unit.unit_code %}">Record the first observation</a>
+  </div>
+{% endif %}
+{% endblock %}
