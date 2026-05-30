@@ -9,7 +9,7 @@ from django.test import TestCase, override_settings
 from inventory.models import (
     Accession, Bench, Crop, Position, ScreenHouse, Site, TrackingUnit,
 )
-from monitoring.models import Observation, ObservationPhoto, QuantityEvent
+from monitoring.models import Observation, ObservationPhoto, QuantityEvent, Treatment
 
 User = get_user_model()
 
@@ -397,4 +397,74 @@ class ArchivedUnitExportTest(TestCase):
 
     def test_excel_returns_200_with_archived_unit(self):
         response = self.client.get('/exports/tracking-units.xlsx/')
+        self.assertEqual(response.status_code, 200)
+
+
+# ── Treatment exports ─────────────────────────────────────────────────────────
+
+def make_observer_exp(username='exp_obs_tx'):
+    user = User.objects.create_user(username=username, password=_PASSWORD)
+    group, _ = Group.objects.get_or_create(name='Observer')
+    user.groups.add(group)
+    return user
+
+
+def make_treatment(unit, **overrides):
+    defaults = dict(
+        tracking_unit=unit,
+        treatment_type=Treatment.TYPE_FUNGICIDE,
+        reason='Export test treatment',
+        product_used='Test Product',
+    )
+    defaults.update(overrides)
+    return Treatment.objects.create(**defaults)
+
+
+class TreatmentExportTest(TestCase):
+
+    def setUp(self):
+        self.manager = make_manager()
+        self.client.login(username='exp_manager', password=_PASSWORD)
+        self.unit = make_unit('TU-EXP-TX-001')
+
+    def test_export_index_includes_treatments_csv_link(self):
+        response = self.client.get('/exports/')
+        self.assertContains(response, '/exports/treatments.csv/')
+
+    def test_export_index_includes_treatments_xlsx_link(self):
+        response = self.client.get('/exports/')
+        self.assertContains(response, '/exports/treatments.xlsx/')
+
+    def test_treatments_csv_returns_200(self):
+        response = self.client.get('/exports/treatments.csv/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_treatments_csv_includes_expected_headers(self):
+        response = self.client.get('/exports/treatments.csv/')
+        headers = csv_headers(response)
+        for col in ['tracking_unit_code', 'treatment_type', 'reason', 'outcome']:
+            self.assertIn(col, headers)
+
+    def test_treatments_csv_includes_treatment_data(self):
+        make_treatment(self.unit)
+        reader = csv.DictReader(StringIO(
+            self.client.get('/exports/treatments.csv/').content.decode()
+        ))
+        rows = list(reader)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['tracking_unit_code'], self.unit.unit_code)
+        self.assertEqual(rows[0]['reason'], 'Export test treatment')
+
+    def test_treatments_excel_returns_200(self):
+        response = self.client.get('/exports/treatments.xlsx/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_observer_cannot_access_treatment_csv(self):
+        obs = make_observer_exp()
+        self.client.login(username='exp_obs_tx', password=_PASSWORD)
+        response = self.client.get('/exports/treatments.csv/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_can_access_treatment_exports(self):
+        response = self.client.get('/exports/treatments.csv/')
         self.assertEqual(response.status_code, 200)

@@ -10,6 +10,8 @@ from .services import (
     export_quantity_events_excel_response,
     export_tracking_units_csv_response,
     export_tracking_units_excel_response,
+    export_treatments_csv_response,
+    export_treatments_excel_response,
 )
 
 
@@ -56,3 +58,13 @@ def photo_metadata_csv(request):
 @manager_required
 def photo_metadata_excel(request):
     return export_photo_metadata_excel_response()
+
+
+@manager_required
+def treatments_csv(request):
+    return export_treatments_csv_response()
+
+
+@manager_required
+def treatments_excel(request):
+    return export_treatments_excel_response()

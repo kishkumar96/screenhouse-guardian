@@ -1,9 +1,11 @@
+import datetime
 import tempfile
 from io import BytesIO
 
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from inventory.models import TrackingUnit
 from monitoring.models import (
@@ -11,6 +13,7 @@ from monitoring.models import (
     Observation,
     ObservationPhoto,
     QuantityEvent,
+    Treatment,
 )
 
 
@@ -448,3 +451,69 @@ class QuantityEventValidationTest(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             event.full_clean()
         self.assertIn('quantity_change', ctx.exception.message_dict)
+
+
+# ── Treatment model ───────────────────────────────────────────────────────────
+
+def make_treatment(unit, **overrides):
+    defaults = dict(
+        tracking_unit=unit,
+        treatment_type=Treatment.TYPE_WATERED,
+        reason='Regular watering cycle',
+    )
+    defaults.update(overrides)
+    return Treatment(**defaults)
+
+
+class TreatmentCreationTest(TestCase):
+
+    def setUp(self):
+        self.unit = make_container('TU-TX-001')
+
+    def test_can_create_treatment(self):
+        tx = Treatment.objects.create(
+            tracking_unit=self.unit,
+            treatment_type=Treatment.TYPE_FUNGICIDE,
+            reason='Powdery mildew observed',
+        )
+        self.assertIsNotNone(tx.pk)
+
+    def test_belongs_to_tracking_unit(self):
+        tx = Treatment.objects.create(
+            tracking_unit=self.unit,
+            treatment_type=Treatment.TYPE_WATERED,
+            reason='Dry soil',
+        )
+        self.assertEqual(tx.tracking_unit, self.unit)
+        self.assertIn(tx, self.unit.treatments.all())
+
+    def test_can_link_related_observation(self):
+        obs = Observation.objects.create(
+            tracking_unit=self.unit,
+            observation_type=Observation.OBSERVATION_TYPE_ISSUE,
+            status=Observation.STATUS_SICK,
+        )
+        tx = Treatment.objects.create(
+            tracking_unit=self.unit,
+            treatment_type=Treatment.TYPE_FUNGICIDE,
+            reason='Responded to sick observation',
+            related_observation=obs,
+        )
+        self.assertEqual(tx.related_observation, obs)
+
+    def test_default_outcome_is_pending(self):
+        tx = Treatment.objects.create(
+            tracking_unit=self.unit,
+            treatment_type=Treatment.TYPE_WATERED,
+            reason='Test',
+        )
+        self.assertEqual(tx.outcome, Treatment.OUTCOME_PENDING)
+
+    def test_str_includes_unit_code_and_type(self):
+        tx = Treatment.objects.create(
+            tracking_unit=self.unit,
+            treatment_type=Treatment.TYPE_WATERED,
+            reason='Test',
+        )
+        self.assertIn(self.unit.unit_code, str(tx))
+        self.assertIn('Watered', str(tx))

@@ -4,8 +4,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from config.permissions import is_manager, manager_required, observer_required
 from inventory.models import TrackingUnit
-from .forms import ObservationForm, ObservationPhotoForm, QuantityEventForm
-from .models import MAX_OBSERVATION_IMAGE_SIZE_MB, Observation
+from .forms import ObservationForm, ObservationPhotoForm, QuantityEventForm, TreatmentForm, TreatmentOutcomeForm
+from .models import MAX_OBSERVATION_IMAGE_SIZE_MB, Observation, Treatment
 from .services import apply_quantity_event
 
 
@@ -130,10 +130,16 @@ def timeline(request, unit_code):
         .select_related('created_by')
         .order_by('-event_date')
     )
+    treatments = (
+        unit.treatments
+        .select_related('created_by', 'related_observation')
+        .order_by('-treatment_date')
+    )
     return render(request, 'monitoring/timeline.html', {
         'unit': unit,
         'observations': observations,
         'quantity_events': quantity_events,
+        'treatments': treatments,
         'show_manager_links': is_manager(request.user),
     })
 
@@ -177,4 +183,56 @@ def create_quantity_event(request, unit_code):
         'unit': unit,
         'form': form,
         'quantity_suggestion': quantity_suggestion,
+    })
+
+
+@manager_required
+def create_treatment(request, unit_code):
+    unit = _get_unit_with_related(unit_code)
+
+    if not unit.is_active:
+        messages.error(request, 'Treatments cannot be recorded for archived units.')
+        return redirect('observe_timeline', unit_code=unit_code)
+
+    if request.method == 'POST':
+        form = TreatmentForm(request.POST, tracking_unit=unit)
+        if form.is_valid():
+            treatment = form.save(commit=False)
+            treatment.tracking_unit = unit
+            treatment.created_by = request.user
+            treatment.save()
+            messages.success(request, 'Treatment recorded successfully.')
+            return redirect('observe_timeline', unit_code=unit_code)
+    else:
+        form = TreatmentForm(tracking_unit=unit)
+
+    latest_obs = (
+        unit.observations.order_by('-created_at').first()
+    )
+
+    return render(request, 'monitoring/treatment_form.html', {
+        'unit': unit,
+        'form': form,
+        'latest_obs': latest_obs,
+    })
+
+
+@manager_required
+def update_treatment_outcome(request, treatment_id):
+    treatment = get_object_or_404(Treatment, pk=treatment_id)
+    unit = treatment.tracking_unit
+
+    if request.method == 'POST':
+        form = TreatmentOutcomeForm(request.POST, instance=treatment)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Treatment outcome updated.')
+            return redirect('observe_timeline', unit_code=unit.unit_code)
+    else:
+        form = TreatmentOutcomeForm(instance=treatment)
+
+    return render(request, 'monitoring/treatment_outcome_form.html', {
+        'treatment': treatment,
+        'unit': unit,
+        'form': form,
     })

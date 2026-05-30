@@ -6,7 +6,7 @@ from django.http import HttpResponse
 from django.utils.timezone import is_aware, make_naive
 
 from inventory.models import TrackingUnit
-from monitoring.models import Observation, ObservationPhoto, QuantityEvent
+from monitoring.models import Observation, ObservationPhoto, QuantityEvent, Treatment
 
 
 def _naive(dt):
@@ -241,6 +241,71 @@ def export_photo_metadata_excel_response():
     ):
         ws.append(_excel_row(_photo_metadata_row(photo)))
     return _excel_response(wb, 'photo_metadata.xlsx')
+
+
+# ── Treatments ────────────────────────────────────────────────────────────────
+
+_TREATMENT_HEADERS = [
+    'tracking_unit_code', 'crop', 'accession',
+    'treatment_type', 'treatment_date',
+    'product_used', 'dose_rate', 'reason',
+    'follow_up_date', 'outcome', 'notes',
+    'created_by', 'created_at', 'updated_at',
+]
+
+
+def _treatment_row(tx):
+    unit = tx.tracking_unit
+    return [
+        unit.unit_code,
+        unit.display_crop,
+        unit.display_accession,
+        tx.treatment_type,
+        tx.treatment_date,
+        tx.product_used,
+        tx.dose_rate,
+        tx.reason,
+        tx.follow_up_date,
+        tx.outcome,
+        tx.notes,
+        tx.created_by.username if tx.created_by else '',
+        tx.created_at,
+        tx.updated_at,
+    ]
+
+
+def _treatments_queryset():
+    return (
+        Treatment.objects
+        .select_related(
+            'tracking_unit__crop',
+            'tracking_unit__accession',
+            'tracking_unit__batch',
+            'tracking_unit__position__bench__screen_house__site',
+            'created_by',
+        )
+        .order_by('treatment_date')
+    )
+
+
+def export_treatments_csv_response():
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="treatments.csv"'
+    writer = csv.writer(response)
+    writer.writerow(_TREATMENT_HEADERS)
+    for tx in _treatments_queryset():
+        writer.writerow(_treatment_row(tx))
+    return response
+
+
+def export_treatments_excel_response():
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Treatments'
+    ws.append(_TREATMENT_HEADERS)
+    for tx in _treatments_queryset():
+        ws.append(_excel_row(_treatment_row(tx)))
+    return _excel_response(wb, 'treatments.xlsx')
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────

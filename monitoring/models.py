@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.validators import FileExtensionValidator
 from django.db import models
+from django.utils import timezone
 
 from inventory.models import TrackingUnit
 
@@ -311,3 +312,92 @@ class QuantityEvent(models.Model):
                 'Quantity events are immutable. Create a new quantity event instead.'
             )
         super().save(*args, **kwargs)
+
+
+# ── Treatment ──────────────────────────────────────────────────────────────────
+
+class Treatment(models.Model):
+
+    TYPE_WATERED = 'watered'
+    TYPE_FERTILISED = 'fertilised'
+    TYPE_FOLIAR_SPRAY = 'foliar_spray'
+    TYPE_FUNGICIDE = 'fungicide'
+    TYPE_INSECTICIDE = 'insecticide'
+    TYPE_REPOTTED = 'repotted'
+    TYPE_PRUNED = 'pruned'
+    TYPE_ISOLATED = 'isolated'
+    TYPE_MOVED_TO_SHADE = 'moved_to_shade'
+    TYPE_MOVED_TO_HARDENING = 'moved_to_hardening_area'
+    TYPE_DESTROYED = 'destroyed'
+    TYPE_OTHER = 'other'
+    TYPE_CHOICES = [
+        (TYPE_WATERED, 'Watered'),
+        (TYPE_FERTILISED, 'Fertilised'),
+        (TYPE_FOLIAR_SPRAY, 'Foliar Spray'),
+        (TYPE_FUNGICIDE, 'Fungicide'),
+        (TYPE_INSECTICIDE, 'Insecticide'),
+        (TYPE_REPOTTED, 'Repotted'),
+        (TYPE_PRUNED, 'Pruned'),
+        (TYPE_ISOLATED, 'Isolated'),
+        (TYPE_MOVED_TO_SHADE, 'Moved to Shade'),
+        (TYPE_MOVED_TO_HARDENING, 'Moved to Hardening Area'),
+        (TYPE_DESTROYED, 'Destroyed'),
+        (TYPE_OTHER, 'Other'),
+    ]
+
+    OUTCOME_PENDING = 'pending'
+    OUTCOME_IMPROVED = 'improved'
+    OUTCOME_NO_CHANGE = 'no_change'
+    OUTCOME_WORSENED = 'worsened'
+    OUTCOME_RESOLVED = 'resolved'
+    OUTCOME_CHOICES = [
+        (OUTCOME_PENDING, 'Pending'),
+        (OUTCOME_IMPROVED, 'Improved'),
+        (OUTCOME_NO_CHANGE, 'No Change'),
+        (OUTCOME_WORSENED, 'Worsened'),
+        (OUTCOME_RESOLVED, 'Resolved'),
+    ]
+
+    tracking_unit = models.ForeignKey(
+        TrackingUnit,
+        on_delete=models.CASCADE,
+        related_name='treatments',
+    )
+    related_observation = models.ForeignKey(
+        Observation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='treatments',
+    )
+    treatment_type = models.CharField(max_length=30, choices=TYPE_CHOICES)
+    treatment_date = models.DateTimeField(default=timezone.now)
+    product_used = models.CharField(max_length=255, blank=True)
+    dose_rate = models.CharField(max_length=100, blank=True)
+    reason = models.TextField()
+    follow_up_date = models.DateField(null=True, blank=True)
+    outcome = models.CharField(
+        max_length=20,
+        choices=OUTCOME_CHOICES,
+        default=OUTCOME_PENDING,
+    )
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_treatments',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-treatment_date']
+
+    def __str__(self):
+        return (
+            f'{self.tracking_unit.unit_code} — '
+            f'{self.get_treatment_type_display()} '
+            f'({self.treatment_date.strftime("%Y-%m-%d")})'
+        )

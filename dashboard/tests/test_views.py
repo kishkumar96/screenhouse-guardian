@@ -5,7 +5,9 @@ from django.test import TestCase
 from inventory.models import (
     Accession, Bench, Crop, Position, ScreenHouse, Site, TrackingUnit,
 )
-from monitoring.models import Observation
+import datetime
+
+from monitoring.models import Observation, Treatment
 
 User = get_user_model()
 
@@ -310,3 +312,72 @@ class DashboardArchivedLinkTest(TestCase):
         response = self.client.get('/dashboard/')
         self.assertContains(response, active.unit_code)
         self.assertNotContains(response, 'TU-DASH-BOTH-ARCH-001')
+
+
+# ── Dashboard treatment follow-up tests ───────────────────────────────────────
+
+def make_treatment(unit, **overrides):
+    defaults = dict(
+        tracking_unit=unit,
+        treatment_type=Treatment.TYPE_FUNGICIDE,
+        reason='Test reason',
+    )
+    defaults.update(overrides)
+    return Treatment.objects.create(**defaults)
+
+
+class DashboardTreatmentLinkTest(TestCase):
+
+    def setUp(self):
+        self.manager = make_manager(username='dash_tx_mgr')
+        self.observer = make_observer(username='dash_tx_obs')
+        self.unit = make_unit('TU-DASH-TX-001')
+
+    def test_manager_sees_treatment_link_on_active_unit(self):
+        self.client.login(username='dash_tx_mgr', password=_PASSWORD)
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, 'Treatment')
+
+    def test_observer_does_not_see_treatment_link(self):
+        self.client.login(username='dash_tx_obs', password=_PASSWORD)
+        response = self.client.get('/dashboard/')
+        self.assertNotContains(response, '/treatments/new/')
+
+
+class DashboardFollowUpSummaryTest(TestCase):
+
+    def setUp(self):
+        self.manager = make_manager(username='dash_fu_mgr')
+        self.client.login(username='dash_fu_mgr', password=_PASSWORD)
+        self.unit = make_unit('TU-DASH-FU-001')
+
+    def test_dashboard_shows_pending_followup_count(self):
+        today = datetime.date.today()
+        future = today + datetime.timedelta(days=7)
+        make_treatment(self.unit, follow_up_date=future, outcome=Treatment.OUTCOME_PENDING)
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, 'Pending Follow-ups')
+        self.assertContains(response, '1')
+
+    def test_dashboard_shows_overdue_followup_count(self):
+        yesterday = datetime.date.today() - datetime.timedelta(days=1)
+        make_treatment(self.unit, follow_up_date=yesterday, outcome=Treatment.OUTCOME_PENDING)
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, 'Overdue Follow-ups')
+
+    def test_overdue_followup_list_shows_unit_code(self):
+        yesterday = datetime.date.today() - datetime.timedelta(days=1)
+        make_treatment(self.unit, follow_up_date=yesterday, outcome=Treatment.OUTCOME_PENDING)
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, self.unit.unit_code)
+
+    def test_resolved_treatment_not_counted_as_pending(self):
+        today = datetime.date.today()
+        future = today + datetime.timedelta(days=3)
+        make_treatment(self.unit, follow_up_date=future, outcome=Treatment.OUTCOME_RESOLVED)
+        response = self.client.get('/dashboard/')
+        # Count should be 0
+        self.assertContains(response, 'Pending Follow-ups')
+        # The value shown should be 0 (not 1)
+        context = response.context
+        self.assertEqual(context['pending_followups'], 0)

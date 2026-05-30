@@ -172,6 +172,39 @@
   vertical-align: bottom;
   cursor: default;
 }
+.followup-section {
+  margin-bottom: 1.75rem;
+}
+.followup-table-wrap {
+  overflow-x: auto;
+  margin-top: 0.75rem;
+}
+.followup-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+.followup-table th {
+  background: #fff8e1;
+  color: #f57f17;
+  text-align: left;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border-bottom: 1px solid #ddd;
+}
+.followup-table td {
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+.followup-table tr:last-child td { border-bottom: none; }
+.overdue-date { color: #c62828; font-weight: 700; }
 {% endblock %}
 
 {% block content %}
@@ -214,7 +247,51 @@
     <div class="summary-value">{{ units_not_checked_7_days }}</div>
     <div class="summary-label">Not Checked 7 Days</div>
   </div>
+  {% if show_manager_links %}
+  <div class="summary-card neutral">
+    <div class="summary-value">{{ pending_followups }}</div>
+    <div class="summary-label">Pending Follow-ups</div>
+  </div>
+  <div class="summary-card {% if overdue_followups > 0 %}warn{% endif %}">
+    <div class="summary-value">{{ overdue_followups }}</div>
+    <div class="summary-label">Overdue Follow-ups</div>
+  </div>
+  {% endif %}
 </div>
+
+{% if show_manager_links and overdue_followup_list %}
+<div class="followup-section">
+  <h3 class="section-heading">Overdue &amp; Due Follow-ups</h3>
+  <div class="followup-table-wrap">
+    <table class="followup-table">
+      <thead>
+        <tr>
+          <th>Unit</th>
+          <th>Crop</th>
+          <th>Follow-up date</th>
+          <th>Treatment</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tx in overdue_followup_list %}
+        <tr>
+          <td class="unit-code">{{ tx.tracking_unit.unit_code }}</td>
+          <td>{{ tx.tracking_unit.display_crop }}</td>
+          <td class="overdue-date">{{ tx.follow_up_date|date:"d M Y" }}</td>
+          <td>{{ tx.get_treatment_type_display }}</td>
+          <td>
+            <a href="{% url 'observe_timeline' unit_code=tx.tracking_unit.unit_code %}" style="font-size:0.78rem;color:#2e7d32;">Timeline</a>
+            &nbsp;
+            <a href="{% url 'monitoring:update_treatment_outcome' treatment_id=tx.pk %}" style="font-size:0.78rem;color:#f57f17;">Update outcome</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 
 <h3 class="section-heading">Active Tracking Units</h3>
 
@@ -267,6 +344,7 @@
           <a href="{% url 'observe_timeline' unit_code=unit.unit_code %}">Timeline</a>
           {% if show_manager_links %}
           <a href="{% url 'monitoring:create_quantity_event' unit_code=unit.unit_code %}">Quantity</a>
+          <a href="{% url 'monitoring:create_treatment' unit_code=unit.unit_code %}">Treatment</a>
           {% endif %}
         </td>
       </tr>

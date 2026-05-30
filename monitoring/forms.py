@@ -1,6 +1,9 @@
-from django import forms
+import datetime
 
-from .models import Observation, ObservationPhoto, QuantityEvent
+from django import forms
+from django.utils import timezone
+
+from .models import Observation, ObservationPhoto, QuantityEvent, Treatment
 
 
 class ObservationForm(forms.ModelForm):
@@ -191,3 +194,60 @@ class QuantityEventForm(forms.Form):
                 )
 
         return cleaned
+
+
+class TreatmentForm(forms.ModelForm):
+
+    def __init__(self, *args, tracking_unit=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._tracking_unit = tracking_unit
+        if tracking_unit is not None:
+            self.fields['related_observation'].queryset = (
+                Observation.objects.filter(tracking_unit=tracking_unit).order_by('-created_at')
+            )
+        else:
+            self.fields['related_observation'].queryset = Observation.objects.none()
+
+    def clean_reason(self):
+        reason = self.cleaned_data.get('reason', '').strip()
+        if not reason:
+            raise forms.ValidationError('Reason is required.')
+        return reason
+
+    def clean_follow_up_date(self):
+        follow_up_date = self.cleaned_data.get('follow_up_date')
+        if follow_up_date is not None:
+            today = timezone.localdate()
+            if follow_up_date < today:
+                raise forms.ValidationError('Follow-up date cannot be in the past.')
+        return follow_up_date
+
+    class Meta:
+        model = Treatment
+        fields = [
+            'treatment_type',
+            'product_used',
+            'dose_rate',
+            'reason',
+            'follow_up_date',
+            'outcome',
+            'notes',
+            'related_observation',
+        ]
+        widgets = {
+            'reason': forms.Textarea(attrs={'rows': 3, 'placeholder': 'Why was this treatment applied?'}),
+            'notes': forms.Textarea(attrs={'rows': 3, 'placeholder': 'Any additional notes…'}),
+            'product_used': forms.TextInput(attrs={'placeholder': 'e.g. Mancozeb 80 WP'}),
+            'dose_rate': forms.TextInput(attrs={'placeholder': 'e.g. 2 g/L'}),
+            'follow_up_date': forms.DateInput(attrs={'type': 'date'}),
+        }
+
+
+class TreatmentOutcomeForm(forms.ModelForm):
+
+    class Meta:
+        model = Treatment
+        fields = ['outcome', 'notes']
+        widgets = {
+            'notes': forms.Textarea(attrs={'rows': 3, 'placeholder': 'Update notes…'}),
+        }

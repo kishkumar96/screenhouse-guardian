@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Observation, ObservationPhoto, QuantityEvent
+from .models import Observation, ObservationPhoto, QuantityEvent, Treatment
 
 
 class ObservationPhotoInline(admin.TabularInline):
@@ -142,6 +142,41 @@ class QuantityEventAdmin(admin.ModelAdmin):
         if obj is not None:
             return False
         return super().has_change_permission(request, obj)
+
+    def save_model(self, request, obj, form, change):
+        if obj.created_by_id is None and request.user.is_authenticated:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(Treatment)
+class TreatmentAdmin(admin.ModelAdmin):
+    list_display = [
+        'tracking_unit',
+        'treatment_type',
+        'treatment_date',
+        'follow_up_date',
+        'outcome',
+        'created_by',
+    ]
+    list_filter = ['treatment_type', 'outcome', 'follow_up_date']
+    search_fields = ['tracking_unit__unit_code', 'reason', 'product_used', 'notes']
+    readonly_fields = ['created_at', 'updated_at']
+    fieldsets = [
+        ('Tracking unit', {
+            'fields': ['tracking_unit', 'related_observation'],
+        }),
+        ('Treatment', {
+            'fields': ['treatment_type', 'treatment_date', 'product_used', 'dose_rate', 'reason'],
+        }),
+        ('Follow-up', {
+            'fields': ['follow_up_date', 'outcome', 'notes'],
+        }),
+        ('Metadata', {
+            'fields': ['created_by', 'created_at', 'updated_at'],
+            'classes': ['collapse'],
+        }),
+    ]
 
     def save_model(self, request, obj, form, change):
         if obj.created_by_id is None and request.user.is_authenticated:

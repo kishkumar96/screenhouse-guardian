@@ -5,8 +5,10 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.test import TestCase, override_settings
 
+import datetime
+
 from inventory.models import TrackingUnit
-from monitoring.models import MAX_OBSERVATION_IMAGE_SIZE_BYTES, Observation, ObservationPhoto, QuantityEvent
+from monitoring.models import MAX_OBSERVATION_IMAGE_SIZE_BYTES, Observation, ObservationPhoto, QuantityEvent, Treatment
 
 User = get_user_model()
 
@@ -888,3 +890,256 @@ class ArchivedUnitTimelineTest(TestCase):
         active = make_unit('TU-ARCH-TL-OBS-001', quantity=5)
         response = self.client.get(f'/observe/{active.unit_code}/timeline/')
         self.assertNotContains(response, 'Archive unit')
+
+
+# ── Treatment views ───────────────────────────────────────────────────────────
+
+def make_treatment(unit, **overrides):
+    defaults = dict(
+        tracking_unit=unit,
+        treatment_type=Treatment.TYPE_WATERED,
+        reason='Test treatment reason',
+    )
+    defaults.update(overrides)
+    return Treatment.objects.create(**defaults)
+
+
+class TreatmentAccessTest(TestCase):
+
+    def setUp(self):
+        self.unit = make_unit('TU-TX-ACCESS-001', quantity=5)
+
+    def test_anonymous_create_treatment_redirects_to_login(self):
+        response = self.client.get(f'/monitoring/units/{self.unit.unit_code}/treatments/new/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+    def test_observer_create_treatment_gets_403(self):
+        observer = make_observer(username='tx_obs_access')
+        self.client.login(username='tx_obs_access', password=_PASSWORD)
+        response = self.client.get(f'/monitoring/units/{self.unit.unit_code}/treatments/new/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_can_access_create_treatment_page(self):
+        manager = make_manager(username='tx_mgr_access')
+        self.client.login(username='tx_mgr_access', password=_PASSWORD)
+        response = self.client.get(f'/monitoring/units/{self.unit.unit_code}/treatments/new/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_archived_unit_treatment_create_redirects_with_message(self):
+        archived = make_unit('TU-TX-ARCH-001', quantity=5, is_active=False)
+        manager = make_manager(username='tx_mgr_arch')
+        self.client.login(username='tx_mgr_arch', password=_PASSWORD)
+        response = self.client.post(
+            f'/monitoring/units/{archived.unit_code}/treatments/new/',
+            {'treatment_type': Treatment.TYPE_WATERED, 'reason': 'Should not work'},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Treatment.objects.count(), 0)
+
+
+class TreatmentCreatePageTest(TestCase):
+
+    def setUp(self):
+        self.manager = make_manager(username='tx_mgr_page')
+        self.client.login(username='tx_mgr_page', password=_PASSWORD)
+        self.unit = make_unit('TU-TX-PAGE-001', crop_name='Baobab', location_text='Bay 5', quantity=8)
+
+    def test_treatment_page_shows_unit_code(self):
+        response = self.client.get(f'/monitoring/units/{self.unit.unit_code}/treatments/new/')
+        self.assertContains(response, self.unit.unit_code)
+
+    def test_treatment_page_shows_crop(self):
+        response = self.client.get(f'/monitoring/units/{self.unit.unit_code}/treatments/new/')
+        self.assertContains(response, 'Baobab')
+
+    def test_treatment_page_shows_location(self):
+        response = self.client.get(f'/monitoring/units/{self.unit.unit_code}/treatments/new/')
+        self.assertContains(response, 'Bay 5')
+
+    def test_manager_can_create_treatment(self):
+        response = self.client.post(
+            f'/monitoring/units/{self.unit.unit_code}/treatments/new/',
+            {
+                'treatment_type': Treatment.TYPE_FUNGICIDE,
+                'reason': 'Powdery mildew spotted',
+                'outcome': Treatment.OUTCOME_PENDING,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Treatment.objects.count(), 1)
+
+    def test_created_by_is_set(self):
+        self.client.post(
+            f'/monitoring/units/{self.unit.unit_code}/treatments/new/',
+            {
+                'treatment_type': Treatment.TYPE_FUNGICIDE,
+                'reason': 'Mildew',
+                'outcome': Treatment.OUTCOME_PENDING,
+            },
+        )
+        tx = Treatment.objects.get()
+        self.assertEqual(tx.created_by, self.manager)
+
+    def test_valid_treatment_redirects_to_timeline(self):
+        response = self.client.post(
+            f'/monitoring/units/{self.unit.unit_code}/treatments/new/',
+            {
+                'treatment_type': Treatment.TYPE_WATERED,
+                'reason': 'Dry soil',
+                'outcome': Treatment.OUTCOME_PENDING,
+            },
+        )
+        self.assertRedirects(
+            response,
+            f'/observe/{self.unit.unit_code}/timeline/',
+            fetch_redirect_response=False,
+        )
+
+    def test_success_message_appears(self):
+        response = self.client.post(
+            f'/monitoring/units/{self.unit.unit_code}/treatments/new/',
+            {
+                'treatment_type': Treatment.TYPE_WATERED,
+                'reason': 'Dry',
+                'outcome': Treatment.OUTCOME_PENDING,
+            },
+            follow=True,
+        )
+        messages = [str(m) for m in response.context['messages']]
+        self.assertTrue(any('Treatment recorded' in m for m in messages))
+
+    def test_missing_reason_is_rejected(self):
+        response = self.client.post(
+            f'/monitoring/units/{self.unit.unit_code}/treatments/new/',
+            {
+                'treatment_type': Treatment.TYPE_WATERED,
+                'reason': '',
+                'outcome': Treatment.OUTCOME_PENDING,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Treatment.objects.count(), 0)
+
+    def test_past_follow_up_date_is_rejected(self):
+        yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+        response = self.client.post(
+            f'/monitoring/units/{self.unit.unit_code}/treatments/new/',
+            {
+                'treatment_type': Treatment.TYPE_WATERED,
+                'reason': 'Test',
+                'outcome': Treatment.OUTCOME_PENDING,
+                'follow_up_date': yesterday,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Treatment.objects.count(), 0)
+
+    def test_treatment_for_archived_unit_is_not_created(self):
+        archived = make_unit('TU-TX-ARCH-POST-001', quantity=5, is_active=False)
+        response = self.client.post(
+            f'/monitoring/units/{archived.unit_code}/treatments/new/',
+            {
+                'treatment_type': Treatment.TYPE_WATERED,
+                'reason': 'Should not be created',
+                'outcome': Treatment.OUTCOME_PENDING,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Treatment.objects.count(), 0)
+
+
+class TreatmentTimelineTest(TestCase):
+
+    def setUp(self):
+        self.manager = make_manager(username='tx_mgr_tl')
+        self.observer = make_observer(username='tx_obs_tl')
+        self.unit = make_unit('TU-TX-TL-001', quantity=5)
+        self.treatment = make_treatment(
+            self.unit,
+            treatment_type=Treatment.TYPE_FUNGICIDE,
+            reason='Leaf spot infection',
+            product_used='Mancozeb',
+            dose_rate='2 g/L',
+            outcome=Treatment.OUTCOME_PENDING,
+        )
+
+    def _get_timeline(self, user):
+        self.client.login(username=user.username, password=_PASSWORD)
+        return self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+
+    def test_timeline_shows_treatment_type(self):
+        response = self._get_timeline(self.manager)
+        self.assertContains(response, 'Fungicide')
+
+    def test_timeline_shows_product_used(self):
+        response = self._get_timeline(self.manager)
+        self.assertContains(response, 'Mancozeb')
+
+    def test_timeline_shows_dose_rate(self):
+        response = self._get_timeline(self.manager)
+        self.assertContains(response, '2 g/L')
+
+    def test_timeline_shows_reason(self):
+        response = self._get_timeline(self.manager)
+        self.assertContains(response, 'Leaf spot infection')
+
+    def test_timeline_shows_outcome(self):
+        response = self._get_timeline(self.manager)
+        self.assertContains(response, 'Pending')
+
+    def test_manager_sees_record_treatment_link_for_active_unit(self):
+        response = self._get_timeline(self.manager)
+        self.assertContains(response, 'Record treatment')
+
+    def test_observer_does_not_see_record_treatment_link(self):
+        response = self._get_timeline(self.observer)
+        self.assertNotContains(response, 'Record treatment')
+
+    def test_archived_unit_does_not_show_record_treatment_link(self):
+        self.unit.is_active = False
+        self.unit.save()
+        response = self._get_timeline(self.manager)
+        self.assertNotContains(response, 'Record treatment')
+
+
+class TreatmentOutcomeUpdateTest(TestCase):
+
+    def setUp(self):
+        self.manager = make_manager(username='tx_mgr_outcome')
+        self.observer = make_observer(username='tx_obs_outcome')
+        self.unit = make_unit('TU-TX-OUT-001', quantity=5)
+        self.treatment = make_treatment(self.unit)
+
+    def test_anonymous_outcome_page_redirects(self):
+        response = self.client.get(f'/monitoring/treatments/{self.treatment.pk}/outcome/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+    def test_observer_outcome_page_gets_403(self):
+        self.client.login(username='tx_obs_outcome', password=_PASSWORD)
+        response = self.client.get(f'/monitoring/treatments/{self.treatment.pk}/outcome/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_can_access_outcome_page(self):
+        self.client.login(username='tx_mgr_outcome', password=_PASSWORD)
+        response = self.client.get(f'/monitoring/treatments/{self.treatment.pk}/outcome/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_manager_can_update_outcome_to_improved(self):
+        self.client.login(username='tx_mgr_outcome', password=_PASSWORD)
+        self.client.post(
+            f'/monitoring/treatments/{self.treatment.pk}/outcome/',
+            {'outcome': Treatment.OUTCOME_IMPROVED, 'notes': 'Plant has recovered'},
+        )
+        self.treatment.refresh_from_db()
+        self.assertEqual(self.treatment.outcome, Treatment.OUTCOME_IMPROVED)
+
+    def test_updated_outcome_appears_on_timeline(self):
+        self.client.login(username='tx_mgr_outcome', password=_PASSWORD)
+        self.client.post(
+            f'/monitoring/treatments/{self.treatment.pk}/outcome/',
+            {'outcome': Treatment.OUTCOME_RESOLVED, 'notes': ''},
+        )
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        self.assertContains(response, 'Resolved')

@@ -163,6 +163,51 @@
 .qty-event-change-pos { color: #2e7d32; }
 .qty-event-meta { font-size: 0.8rem; color: #777; margin-top: 0.25rem; }
 .qty-event-reason { color: #555; font-style: italic; margin-top: 0.2rem; }
+.treatment-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-left: 3px solid #f9a825;
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.875rem;
+}
+.tx-type-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: #fff8e1;
+  color: #f57f17;
+  padding: 0.1rem 0.4rem;
+  border-radius: 10px;
+  margin-bottom: 0.3rem;
+}
+.tx-outcome-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 10px;
+  margin-left: 0.35rem;
+}
+.outcome-pending   { background: #eeeeee; color: #555; }
+.outcome-improved  { background: #c8e6c9; color: #1b5e20; }
+.outcome-no_change { background: #fff9c4; color: #f57f17; }
+.outcome-worsened  { background: #ffcdd2; color: #b71c1c; }
+.outcome-resolved  { background: #e1bee7; color: #4a148c; }
+.tx-detail { font-size: 0.82rem; color: #555; margin-top: 0.4rem; line-height: 1.5; }
+.tx-meta { font-size: 0.8rem; color: #777; margin-top: 0.25rem; }
+.tx-reason { color: #555; font-style: italic; margin-top: 0.2rem; }
+.tx-follow-up {
+  font-size: 0.8rem;
+  color: #e65100;
+  font-weight: 600;
+  margin-top: 0.3rem;
+}
 {% endblock %}
 
 {% block content %}
@@ -192,6 +237,7 @@
   <a href="{% url 'observe' unit_code=unit.unit_code %}">+ New observation</a>
   {% if show_manager_links %}
   <a href="{% url 'monitoring:create_quantity_event' unit_code=unit.unit_code %}" class="secondary">Record quantity change</a>
+  <a href="{% url 'monitoring:create_treatment' unit_code=unit.unit_code %}" class="secondary" style="border-color:#f9a825;color:#f57f17;">Record treatment</a>
   <a href="{% url 'inventory:archive_tracking_unit' unit_code=unit.unit_code %}" class="secondary" style="border-color:#e65100;color:#e65100;">Archive unit</a>
   {% endif %}
   {% endif %}
@@ -222,7 +268,37 @@
 {% endfor %}
 {% endif %}
 
-<h3 class="section-heading" {% if quantity_events %}style="margin-top:1.75rem;"{% endif %}>Observations</h3>
+{% if treatments %}
+<h3 class="section-heading" style="margin-top:1.75rem;">Treatments</h3>
+{% for tx in treatments %}
+<div class="treatment-card">
+  <div>
+    <span class="tx-type-badge">{{ tx.get_treatment_type_display }}</span>
+    <span class="tx-outcome-badge outcome-{{ tx.outcome }}">{{ tx.get_outcome_display }}</span>
+    {% if show_manager_links %}
+    <a href="{% url 'monitoring:update_treatment_outcome' treatment_id=tx.pk %}"
+       style="font-size:0.75rem;color:#555;text-decoration:none;border:1px solid #ddd;border-radius:3px;padding:0.1rem 0.35rem;margin-left:0.4rem;">
+      Update outcome
+    </a>
+    {% endif %}
+  </div>
+  {% if tx.reason %}<p class="tx-reason">"{{ tx.reason }}"</p>{% endif %}
+  <div class="tx-detail">
+    {% if tx.product_used %}<span>Product: {{ tx.product_used }}{% if tx.dose_rate %} — {{ tx.dose_rate }}{% endif %}</span>{% endif %}
+    {% if tx.notes %}<br>Notes: {{ tx.notes }}{% endif %}
+  </div>
+  {% if tx.follow_up_date %}
+  <p class="tx-follow-up">Follow-up due: {{ tx.follow_up_date|date:"d M Y" }}</p>
+  {% endif %}
+  <p class="tx-meta">
+    {{ tx.treatment_date|date:"d M Y, H:i" }}
+    {% if tx.created_by %} &mdash; {{ tx.created_by.get_full_name|default:tx.created_by.username }}{% endif %}
+  </p>
+</div>
+{% endfor %}
+{% endif %}
+
+<h3 class="section-heading" {% if quantity_events or treatments %}style="margin-top:1.75rem;"{% endif %}>Observations</h3>
 
 {% if observations %}
   {% for obs in observations %}

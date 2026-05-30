@@ -4,7 +4,7 @@ from django.db.models import Prefetch
 from django.utils import timezone
 
 from inventory.models import TrackingUnit
-from monitoring.models import Observation
+from monitoring.models import Observation, Treatment
 
 
 def get_latest_observation_for_unit(unit):
@@ -56,6 +56,33 @@ def get_dashboard_data():
         if not u.latest_observation or u.latest_observation.created_at < seven_days_ago
     )
 
+    today = timezone.localdate()
+
+    pending_followups = (
+        Treatment.objects
+        .filter(follow_up_date__isnull=False, outcome=Treatment.OUTCOME_PENDING)
+        .count()
+    )
+    overdue_followups = (
+        Treatment.objects
+        .filter(
+            follow_up_date__isnull=False,
+            follow_up_date__lte=today,
+            outcome=Treatment.OUTCOME_PENDING,
+        )
+        .count()
+    )
+    overdue_followup_list = list(
+        Treatment.objects
+        .filter(
+            follow_up_date__isnull=False,
+            follow_up_date__lte=today,
+            outcome=Treatment.OUTCOME_PENDING,
+        )
+        .select_related('tracking_unit', 'created_by')
+        .order_by('follow_up_date')[:5]
+    )
+
     return {
         'units': units,
         'total_units': total_units,
@@ -64,4 +91,7 @@ def get_dashboard_data():
         'units_without_qr': units_without_qr,
         'units_checked_today': units_checked_today,
         'units_not_checked_7_days': units_not_checked_7_days,
+        'pending_followups': pending_followups,
+        'overdue_followups': overdue_followups,
+        'overdue_followup_list': overdue_followup_list,
     }
