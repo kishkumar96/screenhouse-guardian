@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Exports — Screen House Guardian{% endblock %}
+
+{% block extra_style %}
+.export-heading {
+  margin-bottom: 1.25rem;
+}
+.export-heading h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.4rem;
+}
+.export-heading p {
+  margin: 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+.export-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.export-group {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+}
+.export-group h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2e7d32;
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 0.5rem;
+}
+.export-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.export-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  text-decoration: none;
+  padding: 0.45rem 0.9rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.export-links a.csv {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+}
+.export-links a.csv:hover {
+  background: #c8e6c9;
+}
+.export-links a.xlsx {
+  background: #e3f2fd;
+  color: #1565c0;
+  border: 1px solid #90caf9;
+}
+.export-links a.xlsx:hover {
+  background: #bbdefb;
+}
+{% endblock %}
+
+{% block content %}
+<div class="export-heading">
+  <h2>Data Exports</h2>
+  <p>Download Phase 1A data as CSV or Excel for review, backup, and reporting.</p>
+</div>
+
+<div class="export-groups">
+
+  <div class="export-group">
+    <h3>Tracking Units</h3>
+    <div class="export-links">
+      <a class="csv" href="{% url 'exports:tracking_units_csv' %}">CSV</a>
+      <a class="xlsx" href="{% url 'exports:tracking_units_excel' %}">Excel</a>
+    </div>
+  </div>
+
+  <div class="export-group">
+    <h3>Observations</h3>
+    <div class="export-links">
+      <a class="csv" href="{% url 'exports:observations_csv' %}">CSV</a>
+      <a class="xlsx" href="{% url 'exports:observations_excel' %}">Excel</a>
+    </div>
+  </div>
+
+  <div class="export-group">
+    <h3>Quantity Events</h3>
+    <div class="export-links">
+      <a class="csv" href="{% url 'exports:quantity_events_csv' %}">CSV</a>
+      <a class="xlsx" href="{% url 'exports:quantity_events_excel' %}">Excel</a>
+    </div>
+  </div>
+
+  <div class="export-group">
+    <h3>Photo Metadata</h3>
+    <div class="export-links">
+      <a class="csv" href="{% url 'exports:photo_metadata_csv' %}">CSV</a>
+      <a class="xlsx" href="{% url 'exports:photo_metadata_excel' %}">Excel</a>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
