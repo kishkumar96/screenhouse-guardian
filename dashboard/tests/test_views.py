@@ -283,3 +283,30 @@ class DashboardQuantityLinkTest(TestCase):
         )
         response = self.client.get('/dashboard/')
         self.assertContains(response, str(10 - 5))
+
+
+# ── Dashboard — archived units link ──────────────────────────────────────────
+
+class DashboardArchivedLinkTest(TestCase):
+
+    def test_dashboard_shows_archived_units_link(self):
+        make_observer('dash_arch_obs')
+        self.client.login(username='dash_arch_obs', password=_PASSWORD)
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, '/inventory/archived-units/')
+
+    def test_archived_unit_not_in_active_dashboard(self):
+        make_observer('dash_arch_excl_obs')
+        self.client.login(username='dash_arch_excl_obs', password=_PASSWORD)
+        archived = make_unit('TU-DASH-ARCH-001', is_active=False, archive_reason='dead')
+        response = self.client.get('/dashboard/')
+        self.assertNotContains(response, archived.unit_code)
+
+    def test_active_unit_still_in_dashboard_after_another_archived(self):
+        make_observer('dash_arch_both_obs')
+        self.client.login(username='dash_arch_both_obs', password=_PASSWORD)
+        active = make_unit('TU-DASH-BOTH-ACTIVE-001')
+        make_unit('TU-DASH-BOTH-ARCH-001', is_active=False, archive_reason='empty')
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, active.unit_code)
+        self.assertNotContains(response, 'TU-DASH-BOTH-ARCH-001')

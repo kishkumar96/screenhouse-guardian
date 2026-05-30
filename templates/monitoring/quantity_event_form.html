@@ -127,6 +127,19 @@
   color: #666;
   margin-top: 0.5rem;
 }
+.suggestion-box {
+  background: #fff8e1;
+  border: 1px solid #f0c36d;
+  border-left: 4px solid #f9a825;
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: #6d4c41;
+}
+.suggestion-box strong {
+  color: #5d4037;
+}
 {% endblock %}
 
 {% block content %}
@@ -148,6 +161,14 @@
 {% if form.non_field_errors %}
 <div class="non-field-errors">
   {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+</div>
+{% endif %}
+
+{% if quantity_suggestion %}
+<div class="suggestion-box">
+  <strong>Suggested quantity change:</strong>
+  latest observation recorded {{ quantity_suggestion.affected_quantity }} dead plant{% if quantity_suggestion.affected_quantity != 1 %}s{% endif %} on {{ quantity_suggestion.observed_at|date:"d M Y, H:i" }}.
+  The form has been pre-filled with {{ quantity_suggestion.quantity_change }} for a death event.
 </div>
 {% endif %}
 

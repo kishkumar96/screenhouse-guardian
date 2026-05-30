@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Archived Units — Screen House Guardian{% endblock %}
+
+{% block extra_style %}
+.arch-heading { margin-bottom: 1.25rem; }
+.arch-heading h2 { margin: 0 0 0.25rem; font-size: 1.4rem; }
+.arch-heading p { margin: 0; color: #666; font-size: 0.9rem; }
+.units-table-wrap { overflow-x: auto; }
+.units-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+.units-table th {
+  background: #fff3e0;
+  color: #e65100;
+  text-align: left;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border-bottom: 1px solid #ddd;
+}
+.units-table td {
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+.units-table tr:last-child td { border-bottom: none; }
+.units-table tr:hover td { background: #fafafa; }
+.unit-code {
+  font-family: monospace;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #333;
+}
+.archive-reason-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  background: #eeeeee;
+  color: #424242;
+  white-space: nowrap;
+}
+.action-links a {
+  display: inline-block;
+  font-size: 0.78rem;
+  color: #2e7d32;
+  text-decoration: none;
+  border: 1px solid #a5d6a7;
+  border-radius: 3px;
+  padding: 0.15rem 0.45rem;
+  margin-right: 0.25rem;
+  white-space: nowrap;
+}
+.action-links a:hover { background: #e8f5e9; }
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: #888;
+  font-size: 0.9rem;
+}
+{% endblock %}
+
+{% block content %}
+<div class="arch-heading">
+  <h2>Archived Units</h2>
+  <p>Units removed from active monitoring. Observations, photos, quantity events, and QR codes are preserved.</p>
+</div>
+
+<div class="units-table-wrap">
+  <table class="units-table">
+    <thead>
+      <tr>
+        <th>Unit Code</th>
+        <th>Crop</th>
+        <th>Accession</th>
+        <th>Qty</th>
+        <th>Location</th>
+        <th>Archived</th>
+        <th>Reason</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for unit in units %}
+      <tr>
+        <td class="unit-code">{{ unit.unit_code }}</td>
+        <td>{{ unit.display_crop }}</td>
+        <td>{{ unit.display_accession|default:"—" }}</td>
+        <td>{{ unit.quantity }}</td>
+        <td>{{ unit.display_location|default:"—" }}</td>
+        <td>{% if unit.archived_at %}{{ unit.archived_at|date:"d M Y" }}{% else %}&mdash;{% endif %}</td>
+        <td>
+          {% if unit.archive_reason %}
+          <span class="archive-reason-badge">{{ unit.archive_reason_display }}</span>
+          {% else %}
+          &mdash;
+          {% endif %}
+        </td>
+        <td class="action-links">
+          <a href="{% url 'observe_timeline' unit_code=unit.unit_code %}">Timeline</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="8" class="empty-state">No archived tracking units.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p style="margin-top:1.5rem; font-size:0.875rem;">
+  <a href="{% url 'dashboard:index' %}">&#8592; Back to dashboard</a>
+</p>
+{% endblock %}

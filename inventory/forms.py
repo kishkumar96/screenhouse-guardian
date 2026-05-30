@@ -2,6 +2,18 @@ from django import forms
 
 from .models import Accession, Batch, Crop
 
+ARCHIVE_REASON_CHOICES = [
+    ('dead', 'Dead'),
+    ('empty', 'Empty'),
+    ('distributed', 'Distributed'),
+    ('transferred', 'Transferred'),
+    ('merged', 'Merged'),
+    ('destroyed', 'Destroyed'),
+    ('entered_by_mistake', 'Entered by mistake'),
+    ('retired', 'Retired'),
+    ('other', 'Other'),
+]
+
 
 class CropForm(forms.ModelForm):
     class Meta:
@@ -43,3 +55,15 @@ class BatchForm(forms.ModelForm):
             .order_by('crop__name', 'accession_code')
         )
         self.fields['accession'].empty_label = '— Select accession —'
+
+
+class ArchiveTrackingUnitForm(forms.Form):
+    archive_reason = forms.ChoiceField(
+        choices=ARCHIVE_REASON_CHOICES,
+        label='Archive reason',
+    )
+    confirm = forms.BooleanField(
+        label='I confirm I want to archive this unit. This removes it from the active dashboard.',
+        required=True,
+        error_messages={'required': 'You must check this box to confirm the archive.'},
+    )

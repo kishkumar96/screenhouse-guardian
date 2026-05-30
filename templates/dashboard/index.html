@@ -182,6 +182,7 @@
     {% if show_manager_links %}
       <a href="{% url 'exports:index' %}" class="dash-action-btn">Export data</a>
     {% endif %}
+    <a href="{% url 'inventory:archived_tracking_units' %}" class="dash-action-btn secondary">Archived units</a>
     {% if show_staff_links %}
       <a href="/admin/inventory/trackingunit/add/" class="dash-action-btn secondary">Create unit in admin</a>
     {% endif %}

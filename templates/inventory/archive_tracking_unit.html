@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Archive — {{ unit.unit_code }}{% endblock %}
+
+{% block extra_style %}
+.archive-unit-banner {
+  background: #fff3e0;
+  border-left: 4px solid #e65100;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  border-radius: 0 4px 4px 0;
+}
+.archive-unit-banner h2 { margin: 0 0 0.25rem; font-size: 1.2rem; }
+.archive-unit-meta { font-size: 0.85rem; color: #555; margin: 0; }
+.archive-warning {
+  background: #fce4ec;
+  border: 1px solid #f48fb1;
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.9rem;
+  color: #880e4f;
+}
+.archive-form-section {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+.archive-form-section h3 {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #555;
+}
+.form-group { margin-bottom: 0.9rem; }
+.form-group label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+.form-group label .required { color: #c62828; margin-left: 2px; }
+.form-group select {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+  box-sizing: border-box;
+  background: #fff;
+  -webkit-appearance: none;
+}
+.form-group .errorlist {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0;
+  color: #c62828;
+  font-size: 0.85rem;
+}
+.confirm-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.confirm-row input[type=checkbox] { margin-top: 0.2rem; flex-shrink: 0; }
+.confirm-row label { font-weight: normal; margin: 0; }
+.archive-submit-btn {
+  display: block;
+  width: 100%;
+  padding: 0.9rem;
+  background: #c62828;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 1rem;
+  letter-spacing: 0.03em;
+}
+.archive-submit-btn:hover { background: #b71c1c; }
+.back-link { margin-top: 1rem; text-align: center; font-size: 0.85rem; }
+.back-link a { color: #2e7d32; }
+{% endblock %}
+
+{% block content %}
+<div class="archive-unit-banner">
+  <h2>Archive — {{ unit.unit_code }}</h2>
+  <p class="archive-unit-meta">
+    {{ unit.display_crop }}
+    {% if unit.display_accession %} · {{ unit.display_accession }}{% endif %}
+    {% if unit.display_batch %} · {{ unit.display_batch }}{% endif %}
+    · Qty {{ unit.quantity }}
+    {% if unit.display_location %} · {{ unit.display_location }}{% endif %}
+  </p>
+  {% if latest_obs %}
+  <p class="archive-unit-meta" style="margin-top:0.3rem;">
+    Last observation: <strong>{{ latest_obs.get_status_display }}</strong>
+    &mdash; {{ latest_obs.observed_at|date:"d M Y H:i" }}
+  </p>
+  {% endif %}
+</div>
+
+<div class="archive-warning">
+  <strong>Warning:</strong> Archiving removes this unit from the active dashboard.
+  All observations, photos, quantity events, and QR code history are preserved and remain accessible via timeline and exports.
+</div>
+
+<form method="post" novalidate>
+  {% csrf_token %}
+
+  <div class="archive-form-section">
+    <h3>Archive reason <span style="color:#c62828;">*</span></h3>
+    <div class="form-group">
+      <label for="{{ form.archive_reason.id_for_label }}">
+        Reason <span class="required">*</span>
+      </label>
+      {{ form.archive_reason }}
+      {% if form.archive_reason.errors %}
+      <ul class="errorlist">{% for e in form.archive_reason.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="archive-form-section">
+    <h3>Confirm</h3>
+    <div class="form-group">
+      <div class="confirm-row">
+        {{ form.confirm }}
+        <label for="{{ form.confirm.id_for_label }}">{{ form.confirm.label }}</label>
+      </div>
+      {% if form.confirm.errors %}
+      <ul class="errorlist">{% for e in form.confirm.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+  </div>
+
+  <button type="submit" class="archive-submit-btn">Archive unit</button>
+</form>
+
+<div class="back-link">
+  <a href="{% url 'observe_timeline' unit_code=unit.unit_code %}">Cancel — back to timeline</a>
+</div>
+{% endblock %}

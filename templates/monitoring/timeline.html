@@ -10,6 +10,32 @@
   margin-bottom: 1.25rem;
   border-radius: 0 4px 4px 0;
 }
+.tl-unit-banner.archived {
+  background: #fff3e0;
+  border-color: #e65100;
+}
+.archived-badge {
+  display: inline-block;
+  background: #e65100;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.15rem 0.55rem;
+  border-radius: 10px;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+.archived-notice {
+  background: #fff3e0;
+  border: 1px solid #ffcc80;
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.875rem;
+  color: #e65100;
+}
 .tl-unit-banner h2 { margin: 0 0 0.2rem; font-size: 1.2rem; }
 .tl-unit-meta { font-size: 0.85rem; color: #555; margin: 0; }
 .tl-actions { margin-bottom: 1rem; }
@@ -140,8 +166,11 @@
 {% endblock %}
 
 {% block content %}
-<div class="tl-unit-banner">
-  <h2>{{ unit.unit_code }} — {{ unit.display_crop }}</h2>
+<div class="tl-unit-banner{% if not unit.is_active %} archived{% endif %}">
+  <h2>
+    {{ unit.unit_code }} — {{ unit.display_crop }}
+    {% if not unit.is_active %}<span class="archived-badge">Archived</span>{% endif %}
+  </h2>
   <p class="tl-unit-meta">
     Qty {{ unit.quantity }}
     {% if unit.display_location %} · {{ unit.display_location }}{% endif %}
@@ -150,10 +179,21 @@
   </p>
 </div>
 
+{% if not unit.is_active %}
+<div class="archived-notice">
+  <strong>Archived unit — history preserved.</strong>
+  {% if unit.archive_reason_display %} Reason: {{ unit.archive_reason_display }}.{% endif %}
+  {% if unit.archived_at %} Archived {{ unit.archived_at|date:"d M Y H:i" }}.{% endif %}
+</div>
+{% endif %}
+
 <div class="tl-actions">
+  {% if unit.is_active %}
   <a href="{% url 'observe' unit_code=unit.unit_code %}">+ New observation</a>
   {% if show_manager_links %}
   <a href="{% url 'monitoring:create_quantity_event' unit_code=unit.unit_code %}" class="secondary">Record quantity change</a>
+  <a href="{% url 'inventory:archive_tracking_unit' unit_code=unit.unit_code %}" class="secondary" style="border-color:#e65100;color:#e65100;">Archive unit</a>
+  {% endif %}
   {% endif %}
   <a href="{% url 'qr:label' unit_code=unit.unit_code %}" class="secondary">QR label</a>
   <a href="{% url 'dashboard:index' %}" class="secondary">Back to dashboard</a>

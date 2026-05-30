@@ -121,6 +121,37 @@
 {% endblock %}
 
 {% block content %}
+
+{% if archived %}
+<div class="obs-unit-banner" style="border-color:#e65100;background:#fff3e0;">
+  <h2>{{ unit.unit_code }} — Archived</h2>
+  <p class="obs-unit-meta">
+    {{ unit.display_crop }}
+    {% if unit.display_accession %} · {{ unit.display_accession }}{% endif %}
+    {% if unit.display_batch %} · {{ unit.display_batch }}{% endif %}
+    · Qty {{ unit.quantity }}
+    {% if unit.display_location %} · {{ unit.display_location }}{% endif %}
+  </p>
+</div>
+<div style="background:#fce4ec;border:1px solid #f48fb1;border-radius:4px;padding:1rem;margin-bottom:1.25rem;color:#880e4f;">
+  <strong>This unit has been archived.</strong>
+  New observations cannot be recorded for archived units.
+  {% if unit.archive_reason_display %}<br>Reason: {{ unit.archive_reason_display }}{% endif %}
+  {% if unit.archived_at %}<br>Archived: {{ unit.archived_at|date:"d M Y H:i" }}{% endif %}
+</div>
+<div style="margin-top:1rem;text-align:center;">
+  <a href="{% url 'observe_timeline' unit_code=unit.unit_code %}"
+     style="display:inline-block;background:#2e7d32;color:#fff;padding:0.55rem 1.2rem;border-radius:4px;text-decoration:none;font-weight:600;margin-right:0.5rem;">
+    View timeline
+  </a>
+  <a href="{% url 'dashboard:index' %}"
+     style="display:inline-block;background:#fff;color:#2e7d32;border:1px solid #2e7d32;padding:0.55rem 1.2rem;border-radius:4px;text-decoration:none;font-weight:600;">
+    Back to dashboard
+  </a>
+</div>
+
+{% else %}
+
 {# Unit context banner #}
 <div class="obs-unit-banner">
   <h2>{{ unit.unit_code }}</h2>
@@ -247,6 +278,8 @@
 <p style="text-align:center; margin-top:1rem; font-size:0.85rem;">
   <a href="{% url 'observe_timeline' unit_code=unit.unit_code %}">View observation history</a>
 </p>
+
+{% endif %}{# end archived #}
 {% endblock %}
 
 {% block extra_scripts %}

@@ -353,3 +353,48 @@ class TrackingUnitsStructuredColumnsTest(TestCase):
         make_unit('TU-STRUCT-XL-001', crop_name='Excel Cassava', crop=crop)
         response = self.client.get('/exports/tracking-units.xlsx/')
         self.assertEqual(response.status_code, 200)
+
+
+# ── Archived unit export behaviour ───────────────────────────────────────────
+
+class ArchivedUnitExportTest(TestCase):
+
+    def setUp(self):
+        self.user = make_manager('exp_arch_mgr')
+        self.client.login(username='exp_arch_mgr', password=_PASSWORD)
+        from django.utils import timezone
+        self.archived_unit = make_unit(
+            'TU-ARCH-EXP-001',
+            crop_name='Archived Export Crop',
+            is_active=False,
+            archive_reason='dead',
+        )
+        TrackingUnit.objects.filter(pk=self.archived_unit.pk).update(
+            archived_at=timezone.now(),
+        )
+
+    def test_csv_includes_archived_unit(self):
+        response = self.client.get('/exports/tracking-units.csv/')
+        self.assertIn('TU-ARCH-EXP-001', response.content.decode())
+
+    def test_csv_includes_is_active_false(self):
+        response = self.client.get('/exports/tracking-units.csv/')
+        content = response.content.decode()
+        self.assertIn('TU-ARCH-EXP-001', content)
+        self.assertIn('False', content)
+
+    def test_csv_includes_archive_reason(self):
+        response = self.client.get('/exports/tracking-units.csv/')
+        self.assertIn('dead', response.content.decode())
+
+    def test_csv_has_archived_at_column(self):
+        headers = csv_headers(self.client.get('/exports/tracking-units.csv/'))
+        self.assertIn('archived_at', headers)
+
+    def test_csv_has_archive_reason_column(self):
+        headers = csv_headers(self.client.get('/exports/tracking-units.csv/'))
+        self.assertIn('archive_reason', headers)
+
+    def test_excel_returns_200_with_archived_unit(self):
+        response = self.client.get('/exports/tracking-units.xlsx/')
+        self.assertEqual(response.status_code, 200)

@@ -18,6 +18,45 @@ def _get_unit_with_related(unit_code):
     )
 
 
+def _get_quantity_suggestion(unit):
+    latest_observation = (
+        unit.observations
+        .order_by('-created_at')
+        .first()
+    )
+    latest_quantity_event = (
+        unit.quantity_events
+        .order_by('-event_date')
+        .first()
+    )
+
+    if not latest_observation:
+        return None
+
+    if latest_quantity_event and latest_quantity_event.event_date >= latest_observation.created_at:
+        return None
+
+    if latest_observation.status != Observation.STATUS_DEAD:
+        return None
+
+    affected_quantity = latest_observation.affected_quantity
+    if affected_quantity is None:
+        if unit.unit_type == TrackingUnit.UNIT_TYPE_INDIVIDUAL and unit.quantity > 0:
+            affected_quantity = 1
+        else:
+            return None
+
+    if affected_quantity <= 0:
+        return None
+
+    return {
+        'event_type': 'death',
+        'quantity_change': -affected_quantity,
+        'affected_quantity': affected_quantity,
+        'observed_at': latest_observation.observed_at,
+    }
+
+
 @observer_required
 def index(request):
     return render(request, 'monitoring/index.html')
@@ -26,6 +65,12 @@ def index(request):
 @observer_required
 def observe(request, unit_code):
     unit = _get_unit_with_related(unit_code)
+
+    if not unit.is_active:
+        return render(request, 'monitoring/observe.html', {
+            'unit': unit,
+            'archived': True,
+        })
 
     if request.method == 'POST':
         form = ObservationForm(request.POST, tracking_unit=unit)
@@ -96,6 +141,7 @@ def timeline(request, unit_code):
 @manager_required
 def create_quantity_event(request, unit_code):
     unit = _get_unit_with_related(unit_code)
+    quantity_suggestion = _get_quantity_suggestion(unit)
 
     if request.method == 'POST':
         form = QuantityEventForm(request.POST, current_quantity=unit.quantity)
@@ -119,9 +165,16 @@ def create_quantity_event(request, unit_code):
                     'Quantity update failed. The unit quantity may have changed. Please try again.',
                 )
     else:
-        form = QuantityEventForm(current_quantity=unit.quantity)
+        initial = {}
+        if quantity_suggestion:
+            initial = {
+                'event_type': quantity_suggestion['event_type'],
+                'quantity_change': quantity_suggestion['quantity_change'],
+            }
+        form = QuantityEventForm(initial=initial, current_quantity=unit.quantity)
 
     return render(request, 'monitoring/quantity_event_form.html', {
         'unit': unit,
         'form': form,
+        'quantity_suggestion': quantity_suggestion,
     })

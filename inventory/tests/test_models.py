@@ -1,6 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
+from django.utils import timezone
 
 from inventory.models import (
     Accession, Batch, Bench, Crop, Position, ScreenHouse, Site, TrackingUnit,
@@ -360,3 +361,57 @@ class TrackingUnitStructuredLinksTest(TestCase):
             crop_name='Crop',
         )
         self.assertEqual(unit.display_location, '')
+
+
+# ── TrackingUnit.save() — auto-archive behaviour ──────────────────────────────
+
+class TrackingUnitAutoArchiveTest(TestCase):
+
+    def _make(self, code, **kwargs):
+        return TrackingUnit.objects.create(
+            unit_code=code,
+            unit_type=TrackingUnit.UNIT_TYPE_CONTAINER,
+            crop_name='Archive Crop',
+            **kwargs,
+        )
+
+    def test_archived_at_auto_set_when_is_active_set_false_on_save(self):
+        unit = self._make('TU-AUTO-ARCH-001')
+        before = timezone.now()
+        unit.is_active = False
+        unit.save()
+        unit.refresh_from_db()
+        self.assertIsNotNone(unit.archived_at)
+        self.assertGreaterEqual(unit.archived_at, before)
+
+    def test_archived_at_not_overwritten_when_already_set(self):
+        earlier = timezone.now()
+        unit = self._make('TU-AUTO-ARCH-002')
+        unit.is_active = False
+        unit.archived_at = earlier
+        unit.save()
+        unit.refresh_from_db()
+        self.assertEqual(unit.archived_at, earlier)
+
+    def test_archived_at_not_set_when_unit_remains_active(self):
+        unit = self._make('TU-AUTO-ARCH-003')
+        unit.crop_name = 'Changed Crop'
+        unit.save()
+        unit.refresh_from_db()
+        self.assertIsNone(unit.archived_at)
+
+    def test_archived_at_auto_set_via_update_fields(self):
+        unit = self._make('TU-AUTO-ARCH-004')
+        before = timezone.now()
+        unit.is_active = False
+        unit.save(update_fields=['is_active'])
+        unit.refresh_from_db()
+        self.assertIsNotNone(unit.archived_at)
+        self.assertGreaterEqual(unit.archived_at, before)
+
+    def test_archived_at_set_when_unit_created_as_inactive(self):
+        before = timezone.now()
+        unit = self._make('TU-AUTO-ARCH-005', is_active=False)
+        unit.refresh_from_db()
+        self.assertIsNotNone(unit.archived_at)
+        self.assertGreaterEqual(unit.archived_at, before)

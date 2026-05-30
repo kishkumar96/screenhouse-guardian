@@ -91,7 +91,7 @@ class TrackingUnitAdmin(admin.ModelAdmin):
         'is_active',
         'created_at',
     ]
-    list_filter = ['unit_type', 'container_type', 'is_active']
+    list_filter = ['unit_type', 'container_type', 'is_active', 'archive_reason']
     search_fields = ['unit_code', 'crop_name', 'accession_code', 'batch_code', 'location_text']
     readonly_fields = ['created_by', 'created_at', 'updated_at', 'qr_label_link']
     ordering = ['-created_at']

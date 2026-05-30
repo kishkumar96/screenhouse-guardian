@@ -1,10 +1,11 @@
 from django.contrib import messages
 from django.db.models import Count
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 
 from config.permissions import is_manager, manager_required, observer_required
 
-from .forms import AccessionForm, BatchForm, CropForm
+from .forms import AccessionForm, ArchiveTrackingUnitForm, BatchForm, CropForm
 from .models import Accession, Batch, Crop, TrackingUnit
 
 
@@ -109,4 +110,53 @@ def batch_list(request):
         'batches': batches,
         'form': form,
         'show_manager_links': is_manager(request.user),
+    })
+
+
+def _get_unit_for_archive(unit_code):
+    return get_object_or_404(
+        TrackingUnit.objects.select_related(
+            'crop', 'accession', 'batch', 'position__bench__screen_house__site',
+        ),
+        unit_code=unit_code,
+    )
+
+
+@manager_required
+def archive_tracking_unit(request, unit_code):
+    unit = _get_unit_for_archive(unit_code)
+
+    if not unit.is_active:
+        messages.info(request, f'Unit {unit.unit_code} is already archived.')
+        return redirect('observe_timeline', unit_code=unit_code)
+
+    if request.method == 'POST':
+        form = ArchiveTrackingUnitForm(request.POST)
+        if form.is_valid():
+            unit.is_active = False
+            unit.archived_at = timezone.now()
+            unit.archive_reason = form.cleaned_data['archive_reason']
+            unit.save(update_fields=['is_active', 'archived_at', 'archive_reason'])
+            messages.success(request, f'Unit {unit.unit_code} has been archived.')
+            return redirect('observe_timeline', unit_code=unit_code)
+    else:
+        form = ArchiveTrackingUnitForm()
+
+    latest_obs = unit.observations.order_by('-created_at').first()
+    return render(request, 'inventory/archive_tracking_unit.html', {
+        'unit': unit,
+        'form': form,
+        'latest_obs': latest_obs,
+    })
+
+
+@observer_required
+def archived_tracking_units(request):
+    units = (
+        TrackingUnit.objects.filter(is_active=False)
+        .select_related('crop', 'accession', 'batch', 'position__bench__screen_house__site')
+        .order_by('-archived_at', '-created_at')
+    )
+    return render(request, 'inventory/archived_units.html', {
+        'units': units,
     })

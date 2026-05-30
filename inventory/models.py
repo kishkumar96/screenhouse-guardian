@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 
 class Crop(models.Model):
@@ -208,6 +209,14 @@ class TrackingUnit(models.Model):
     def __str__(self):
         return f'{self.unit_code} ({self.get_unit_type_display()})'
 
+    def save(self, *args, **kwargs):
+        if not self.is_active and self.archived_at is None:
+            self.archived_at = timezone.now()
+            update_fields = kwargs.get('update_fields')
+            if update_fields is not None and 'archived_at' not in update_fields:
+                kwargs['update_fields'] = list(update_fields) + ['archived_at']
+        super().save(*args, **kwargs)
+
     def clean(self):
         errors = {}
 
@@ -254,3 +263,19 @@ class TrackingUnit(models.Model):
             site = sh.site
             return f'{site.name} / {sh.name} / {bench.name} / {pos.code}'
         return self.location_text
+
+    _ARCHIVE_REASON_LABELS = {
+        'dead': 'Dead',
+        'empty': 'Empty',
+        'distributed': 'Distributed',
+        'transferred': 'Transferred',
+        'merged': 'Merged',
+        'destroyed': 'Destroyed',
+        'entered_by_mistake': 'Entered by mistake',
+        'retired': 'Retired',
+        'other': 'Other',
+    }
+
+    @property
+    def archive_reason_display(self):
+        return self._ARCHIVE_REASON_LABELS.get(self.archive_reason, self.archive_reason)

@@ -478,6 +478,56 @@ class QuantityEventFormDisplayTest(TestCase):
         for value in ('initial', 'split', 'merge', 'distribution'):
             self.assertNotContains(response, f'value="{value}"')
 
+    def test_prefills_death_suggestion_from_latest_dead_observation(self):
+        make_observation(
+            self.unit,
+            status=Observation.STATUS_DEAD,
+            affected_quantity=3,
+        )
+        response = self.client.get(_qty_url(self.unit.unit_code))
+        self.assertContains(response, 'Suggested quantity change')
+        self.assertContains(response, '3 dead plants')
+        self.assertEqual(response.context['form'].initial['event_type'], 'death')
+        self.assertEqual(response.context['form'].initial['quantity_change'], -3)
+
+    def test_does_not_suggest_when_latest_observation_is_not_dead(self):
+        make_observation(
+            self.unit,
+            status=Observation.STATUS_SICK,
+            affected_quantity=3,
+        )
+        response = self.client.get(_qty_url(self.unit.unit_code))
+        self.assertNotContains(response, 'Suggested quantity change')
+
+    def test_individual_dead_observation_without_affected_quantity_suggests_minus_one(self):
+        unit = make_unit(
+            'TU-QD-IND-001',
+            unit_type=TrackingUnit.UNIT_TYPE_INDIVIDUAL,
+            quantity=1,
+        )
+        make_observation(
+            unit,
+            status=Observation.STATUS_DEAD,
+            affected_quantity=None,
+        )
+        response = self.client.get(_qty_url(unit.unit_code))
+        self.assertContains(response, 'Suggested quantity change')
+        self.assertEqual(response.context['form'].initial['quantity_change'], -1)
+
+    def test_does_not_suggest_if_quantity_event_is_newer_than_observation(self):
+        make_observation(
+            self.unit,
+            status=Observation.STATUS_DEAD,
+            affected_quantity=2,
+        )
+        self.client.post(_qty_url(self.unit.unit_code), {
+            'event_type': 'death',
+            'quantity_change': '-2',
+            'reason': 'Applied from latest observation',
+        })
+        response = self.client.get(_qty_url(self.unit.unit_code))
+        self.assertNotContains(response, 'Suggested quantity change')
+
 
 # ── Quantity event form — POST helpers ────────────────────────────────────────
 
@@ -740,3 +790,101 @@ class TimelineQuantityEventsTest(TestCase):
         self.client.login(username='tl_qty_observer', password=_PASSWORD)
         response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
         self.assertNotContains(response, 'Record quantity change')
+
+
+# ── Archived unit — observe blocking ─────────────────────────────────────────
+
+class ArchivedUnitObserveTest(TestCase):
+
+    def setUp(self):
+        self.user = make_observer('arch_obs_blk')
+        self.client.login(username='arch_obs_blk', password=_PASSWORD)
+        self.unit = make_unit('TU-ARCH-OBS-001', quantity=5)
+        self.unit.is_active = False
+        self.unit.archive_reason = 'dead'
+        self.unit.save(update_fields=['is_active', 'archive_reason'])
+
+    def test_archived_unit_observe_get_returns_200(self):
+        response = self.client.get(f'/observe/{self.unit.unit_code}/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_archived_unit_observe_shows_archived_warning(self):
+        response = self.client.get(f'/observe/{self.unit.unit_code}/')
+        self.assertContains(response, 'archived')
+
+    def test_archived_unit_observe_shows_timeline_link(self):
+        response = self.client.get(f'/observe/{self.unit.unit_code}/')
+        self.assertContains(response, f'/observe/{self.unit.unit_code}/timeline/')
+
+    def test_archived_unit_observe_shows_dashboard_link(self):
+        response = self.client.get(f'/observe/{self.unit.unit_code}/')
+        self.assertContains(response, '/dashboard/')
+
+    def test_archived_unit_observe_post_does_not_create_observation(self):
+        self.client.post(f'/observe/{self.unit.unit_code}/', {
+            'status': Observation.STATUS_HEALTHY,
+            'observation_type': Observation.OBSERVATION_TYPE_ROUTINE,
+        })
+        self.assertFalse(Observation.objects.filter(tracking_unit=self.unit).exists())
+
+    def test_active_unit_observe_still_works(self):
+        active = make_unit('TU-ARCH-ACTIVE-002', quantity=3)
+        response = self.client.post(f'/observe/{active.unit_code}/', {
+            'status': Observation.STATUS_HEALTHY,
+            'observation_type': Observation.OBSERVATION_TYPE_ROUTINE,
+        })
+        self.assertRedirects(
+            response,
+            f'/observe/{active.unit_code}/timeline/',
+            fetch_redirect_response=False,
+        )
+        self.assertTrue(Observation.objects.filter(tracking_unit=active).exists())
+
+
+# ── Archived unit — timeline ──────────────────────────────────────────────────
+
+class ArchivedUnitTimelineTest(TestCase):
+
+    def setUp(self):
+        self.user = make_observer('arch_tl_obs')
+        self.client.login(username='arch_tl_obs', password=_PASSWORD)
+        self.unit = make_unit('TU-ARCH-TL-001', quantity=2, crop_name='Archive TL Crop')
+        make_observation(self.unit, status=Observation.STATUS_DEAD)
+        self.unit.is_active = False
+        self.unit.archive_reason = 'dead'
+        self.unit.save(update_fields=['is_active', 'archive_reason'])
+
+    def test_archived_unit_timeline_returns_200(self):
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_archived_unit_timeline_shows_archived_badge(self):
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        self.assertContains(response, 'Archived')
+
+    def test_archived_unit_timeline_shows_archive_reason(self):
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        self.assertContains(response, 'Dead')
+
+    def test_archived_unit_timeline_shows_observations(self):
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        self.assertContains(response, 'Dead')
+
+    def test_archived_unit_timeline_does_not_show_archive_link(self):
+        make_manager('arch_tl_mgr')
+        self.client.login(username='arch_tl_mgr', password=_PASSWORD)
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        self.assertNotContains(response, 'Archive unit')
+
+    def test_active_unit_timeline_shows_archive_link_for_manager(self):
+        make_manager('arch_tl_mgr2')
+        self.client.login(username='arch_tl_mgr2', password=_PASSWORD)
+        active = make_unit('TU-ARCH-TL-ACTIVE-001', quantity=5)
+        response = self.client.get(f'/observe/{active.unit_code}/timeline/')
+        self.assertContains(response, 'Archive unit')
+        self.assertContains(response, f'/inventory/units/{active.unit_code}/archive/')
+
+    def test_active_unit_timeline_does_not_show_archive_link_for_observer(self):
+        active = make_unit('TU-ARCH-TL-OBS-001', quantity=5)
+        response = self.client.get(f'/observe/{active.unit_code}/timeline/')
+        self.assertNotContains(response, 'Archive unit')
