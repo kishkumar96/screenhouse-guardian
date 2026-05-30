@@ -111,16 +111,16 @@
   <p class="scan-instruction">Scan to update status</p>
 
   <ul class="label-meta">
-    <li><span class="key">Crop:</span> {{ unit.crop_name }}</li>
-    {% if unit.accession_code %}
-    <li><span class="key">Accession:</span> {{ unit.accession_code }}</li>
+    <li><span class="key">Crop:</span> {{ unit.display_crop }}</li>
+    {% if unit.display_accession %}
+    <li><span class="key">Accession:</span> {{ unit.display_accession }}</li>
     {% endif %}
-    {% if unit.batch_code %}
-    <li><span class="key">Batch:</span> {{ unit.batch_code }}</li>
+    {% if unit.display_batch %}
+    <li><span class="key">Batch:</span> {{ unit.display_batch }}</li>
     {% endif %}
     <li><span class="key">Type:</span> {{ unit.get_unit_type_display }}</li>
     <li><span class="key">Quantity:</span> {{ unit.quantity }}</li>
-    <li><span class="key">Location:</span> {{ unit.location_text|default:"—" }}</li>
+    <li><span class="key">Location:</span> {{ unit.display_location|default:"—" }}</li>
   </ul>
 
   {% if can_generate %}

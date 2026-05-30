@@ -20,6 +20,12 @@ def get_dashboard_data():
 
     units = list(
         TrackingUnit.objects.filter(is_active=True)
+        .select_related(
+            'crop',
+            'accession',
+            'batch',
+            'position__bench__screen_house__site',
+        )
         .prefetch_related(
             Prefetch(
                 'observations',

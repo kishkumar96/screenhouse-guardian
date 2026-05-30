@@ -2,7 +2,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.test import TestCase
 
-from inventory.models import TrackingUnit
+from inventory.models import (
+    Accession, Bench, Crop, Position, ScreenHouse, Site, TrackingUnit,
+)
 from monitoring.models import Observation
 
 User = get_user_model()
@@ -192,3 +194,56 @@ class DashboardManagerLinksTest(TestCase):
         response = self.client.get('/dashboard/')
         self.assertFalse(response.context['show_staff_links'])
         self.assertNotContains(response, 'Create unit in admin')
+
+
+# ── Phase 1B: display property fallback / structured tests ────────────────────
+
+def _make_structured_position(site_name='Dash Site', sh_name='DSH1', bench_name='Bench X', pos_code='P1'):
+    site, _ = Site.objects.get_or_create(name=site_name)
+    sh, _ = ScreenHouse.objects.get_or_create(site=site, name=sh_name)
+    bench, _ = Bench.objects.get_or_create(screen_house=sh, name=bench_name)
+    pos, _ = Position.objects.get_or_create(bench=bench, code=pos_code)
+    return pos
+
+
+class DashboardDisplayPropertiesTest(TestCase):
+
+    def setUp(self):
+        self.user = make_observer('dash_disp_obs')
+        self.client.login(username='dash_disp_obs', password=_PASSWORD)
+
+    def test_shows_structured_crop_name_when_linked(self):
+        crop = Crop.objects.create(name='Structured Cassava')
+        make_unit('TU-DISP-001', crop_name='Old Cassava', crop=crop)
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, 'Structured Cassava')
+
+    def test_falls_back_to_crop_name_when_no_crop_fk(self):
+        make_unit('TU-DISP-002', crop_name='Fallback Crop')
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, 'Fallback Crop')
+
+    def test_shows_structured_location_when_position_linked(self):
+        pos = _make_structured_position(
+            site_name='SiteDash', sh_name='SH99', bench_name='Bench Z', pos_code='PZ'
+        )
+        make_unit('TU-DISP-003', location_text='Old Location', position=pos)
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, 'SiteDash / SH99 / Bench Z / PZ')
+
+    def test_falls_back_to_location_text_when_no_position_fk(self):
+        make_unit('TU-DISP-004', location_text='Fallback Bay 5')
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, 'Fallback Bay 5')
+
+    def test_shows_structured_accession_when_linked(self):
+        crop = Crop.objects.create(name='Crop For Acc')
+        acc = Accession.objects.create(crop=crop, accession_code='STRUCT-ACC-001')
+        make_unit('TU-DISP-005', crop_name='Crop For Acc', accession_code='OLD-ACC', accession=acc)
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, 'STRUCT-ACC-001')
+
+    def test_falls_back_to_accession_code_when_no_accession_fk(self):
+        make_unit('TU-DISP-006', accession_code='LEGACY-ACC-006')
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, 'LEGACY-ACC-006')

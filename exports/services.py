@@ -19,8 +19,12 @@ def _naive(dt):
 # ── Tracking units ────────────────────────────────────────────────────────────
 
 _TRACKING_UNIT_HEADERS = [
-    'unit_code', 'unit_type', 'container_type', 'crop_name',
-    'accession_code', 'batch_code', 'quantity', 'location_text',
+    'unit_code', 'unit_type', 'container_type',
+    'crop_name', 'structured_crop',
+    'accession_code', 'structured_accession',
+    'batch_code', 'structured_batch',
+    'quantity',
+    'location_text', 'structured_location',
     'has_qr_code', 'is_active', 'archived_at', 'archive_reason',
     'created_at', 'updated_at',
 ]
@@ -32,10 +36,14 @@ def _tracking_unit_row(unit):
         unit.unit_type,
         unit.container_type,
         unit.crop_name,
+        unit.crop.name if unit.crop_id else '',
         unit.accession_code,
+        unit.accession.accession_code if unit.accession_id else '',
         unit.batch_code,
+        unit.batch.batch_code if unit.batch_id else '',
         unit.quantity,
         unit.location_text,
+        unit.display_location if unit.position_id else '',
         bool(unit.qr_code),
         unit.is_active,
         unit.archived_at,
@@ -45,12 +53,25 @@ def _tracking_unit_row(unit):
     ]
 
 
+def _tracking_units_queryset():
+    return (
+        TrackingUnit.objects
+        .select_related(
+            'crop',
+            'accession',
+            'batch',
+            'position__bench__screen_house__site',
+        )
+        .order_by('unit_code')
+    )
+
+
 def export_tracking_units_csv_response():
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = 'attachment; filename="tracking_units.csv"'
     writer = csv.writer(response)
     writer.writerow(_TRACKING_UNIT_HEADERS)
-    for unit in TrackingUnit.objects.all().order_by('unit_code'):
+    for unit in _tracking_units_queryset():
         writer.writerow(_tracking_unit_row(unit))
     return response
 
@@ -60,7 +81,7 @@ def export_tracking_units_excel_response():
     ws = wb.active
     ws.title = 'Tracking Units'
     ws.append(_TRACKING_UNIT_HEADERS)
-    for unit in TrackingUnit.objects.all().order_by('unit_code'):
+    for unit in _tracking_units_queryset():
         ws.append(_excel_row(_tracking_unit_row(unit)))
     return _excel_response(wb, 'tracking_units.xlsx')
 

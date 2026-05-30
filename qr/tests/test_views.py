@@ -4,7 +4,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.test import TestCase, override_settings
 
-from inventory.models import TrackingUnit
+from inventory.models import (
+    Accession, Batch, Bench, Crop, Position, ScreenHouse, Site, TrackingUnit,
+)
 
 User = get_user_model()
 
@@ -161,3 +163,62 @@ class GenerateViewTest(TestCase):
         # GET is not allowed even for managers
         response = self.client.get(f'/qr/units/{self.unit.unit_code}/generate/')
         self.assertEqual(response.status_code, 405)
+
+
+# ── Phase 1B: QR label uses display helpers ───────────────────────────────────
+
+class LabelDisplayPropertiesTest(TestCase):
+
+    def setUp(self):
+        self.user = make_user('qr_disp_obs', 'Observer')
+        self.client.login(username='qr_disp_obs', password=_PASSWORD)
+
+    def test_label_shows_structured_crop_when_fk_linked(self):
+        crop = Crop.objects.create(name='Structured Taro')
+        unit = make_unit('TU-QD-001', crop_name='Old Taro', crop=crop)
+        response = self.client.get(f'/qr/units/{unit.unit_code}/label/')
+        self.assertContains(response, 'Structured Taro')
+
+    def test_label_falls_back_to_crop_name_when_no_fk(self):
+        unit = make_unit('TU-QD-002', crop_name='Legacy Taro')
+        response = self.client.get(f'/qr/units/{unit.unit_code}/label/')
+        self.assertContains(response, 'Legacy Taro')
+
+    def test_label_shows_structured_accession_when_fk_linked(self):
+        crop = Crop.objects.create(name='QD Crop')
+        acc = Accession.objects.create(crop=crop, accession_code='QD-ACC-STRUCT')
+        unit = make_unit('TU-QD-003', crop_name='QD Crop', accession_code='OLD-ACC', accession=acc)
+        response = self.client.get(f'/qr/units/{unit.unit_code}/label/')
+        self.assertContains(response, 'QD-ACC-STRUCT')
+
+    def test_label_falls_back_to_accession_code_when_no_fk(self):
+        unit = make_unit('TU-QD-004', accession_code='LEGACY-QD-ACC')
+        response = self.client.get(f'/qr/units/{unit.unit_code}/label/')
+        self.assertContains(response, 'LEGACY-QD-ACC')
+
+    def test_label_shows_structured_location_when_position_linked(self):
+        site, _ = Site.objects.get_or_create(name='QD Site')
+        sh, _ = ScreenHouse.objects.get_or_create(site=site, name='QDSH1')
+        bench, _ = Bench.objects.get_or_create(screen_house=sh, name='QD Bench')
+        pos, _ = Position.objects.get_or_create(bench=bench, code='QDP1')
+        unit = make_unit('TU-QD-005', location_text='Old location', position=pos)
+        response = self.client.get(f'/qr/units/{unit.unit_code}/label/')
+        self.assertContains(response, 'QD Site / QDSH1 / QD Bench / QDP1')
+
+    def test_label_falls_back_to_location_text_when_no_position_fk(self):
+        unit = make_unit('TU-QD-006', location_text='Legacy Bay X')
+        response = self.client.get(f'/qr/units/{unit.unit_code}/label/')
+        self.assertContains(response, 'Legacy Bay X')
+
+    def test_label_shows_structured_batch_when_fk_linked(self):
+        crop = Crop.objects.create(name='QD Batch Crop')
+        acc = Accession.objects.create(crop=crop, accession_code='QD-BCH-ACC')
+        batch = Batch.objects.create(accession=acc, batch_code='QD-BCH-STRUCT')
+        unit = make_unit('TU-QD-007', crop_name='QD Batch Crop', batch_code='OLD-BCH', batch=batch)
+        response = self.client.get(f'/qr/units/{unit.unit_code}/label/')
+        self.assertContains(response, 'QD-BCH-STRUCT')
+
+    def test_label_falls_back_to_batch_code_when_no_fk(self):
+        unit = make_unit('TU-QD-008', batch_code='LEGACY-QD-BCH')
+        response = self.client.get(f'/qr/units/{unit.unit_code}/label/')
+        self.assertContains(response, 'LEGACY-QD-BCH')

@@ -3,7 +3,9 @@ from io import StringIO
 from django.core.management import call_command
 from django.test import TestCase
 
-from inventory.models import TrackingUnit
+from inventory.models import (
+    Accession, Bench, Crop, Position, ScreenHouse, Site, TrackingUnit,
+)
 
 
 class CreateDemoTrackingUnitsCommandTest(TestCase):
@@ -94,3 +96,57 @@ class CreateDemoTrackingUnitsCommandTest(TestCase):
         from monitoring.models import Observation
         self._call()
         self.assertEqual(Observation.objects.count(), 0)
+
+    # ── Phase 1B structured record tests ─────────────────────────────────────
+
+    def test_command_creates_structured_crop_records(self):
+        self._call()
+        self.assertTrue(Crop.objects.filter(name='Cassava').exists())
+        self.assertTrue(Crop.objects.filter(name='Taro').exists())
+        self.assertTrue(Crop.objects.filter(name='Banana').exists())
+        self.assertTrue(Crop.objects.filter(name='Kava').exists())
+
+    def test_command_creates_structured_accession_records(self):
+        self._call()
+        self.assertTrue(Accession.objects.filter(accession_code='CAS-ACC-001').exists())
+        self.assertTrue(Accession.objects.filter(accession_code='TAR-ACC-001').exists())
+        self.assertTrue(Accession.objects.filter(accession_code='BAN-ACC-001').exists())
+        self.assertTrue(Accession.objects.filter(accession_code='KAV-ACC-001').exists())
+
+    def test_command_creates_structured_location_records(self):
+        self._call()
+        self.assertTrue(Site.objects.filter(name='Default Site').exists())
+        self.assertTrue(ScreenHouse.objects.filter(name='SH1').exists())
+        for bench_name in ['Bench A', 'Bench B', 'Bench C', 'Bench D']:
+            self.assertTrue(Bench.objects.filter(name=bench_name).exists())
+        self.assertTrue(Position.objects.filter(code='Unspecified').exists())
+
+    def test_demo_units_have_crop_fk_set(self):
+        self._call()
+        unit = TrackingUnit.objects.get(unit_code='TU-CAS-0001')
+        self.assertIsNotNone(unit.crop_id)
+        self.assertEqual(unit.crop.name, 'Cassava')
+
+    def test_demo_units_have_accession_fk_set(self):
+        self._call()
+        unit = TrackingUnit.objects.get(unit_code='TU-CAS-0001')
+        self.assertIsNotNone(unit.accession_id)
+        self.assertEqual(unit.accession.accession_code, 'CAS-ACC-001')
+
+    def test_demo_units_have_position_fk_set(self):
+        self._call()
+        unit = TrackingUnit.objects.get(unit_code='TU-CAS-0001')
+        self.assertIsNotNone(unit.position_id)
+
+    def test_structured_records_idempotent_on_second_run(self):
+        self._call()
+        self._call()
+        self.assertEqual(Crop.objects.filter(name='Cassava').count(), 1)
+        self.assertEqual(Accession.objects.filter(accession_code='CAS-ACC-001').count(), 1)
+
+    def test_legacy_text_fields_still_populated(self):
+        self._call()
+        unit = TrackingUnit.objects.get(unit_code='TU-CAS-0001')
+        self.assertEqual(unit.crop_name, 'Cassava')
+        self.assertEqual(unit.accession_code, 'CAS-ACC-001')
+        self.assertEqual(unit.location_text, 'SH1 / Bench A')

@@ -125,11 +125,11 @@
 <div class="obs-unit-banner">
   <h2>{{ unit.unit_code }}</h2>
   <p class="obs-unit-meta">
-    {{ unit.crop_name }}
-    {% if unit.accession_code %} · {{ unit.accession_code }}{% endif %}
-    {% if unit.batch_code %} · {{ unit.batch_code }}{% endif %}
+    {{ unit.display_crop }}
+    {% if unit.display_accession %} · {{ unit.display_accession }}{% endif %}
+    {% if unit.display_batch %} · {{ unit.display_batch }}{% endif %}
     · Qty {{ unit.quantity }}
-    {% if unit.location_text %} · {{ unit.location_text }}{% endif %}
+    {% if unit.display_location %} · {{ unit.display_location }}{% endif %}
   </p>
   {% if latest_obs %}
   <p class="obs-unit-meta" style="margin-top:0.3rem;">

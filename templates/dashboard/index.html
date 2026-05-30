@@ -163,6 +163,15 @@
   color: #888;
   font-size: 0.9rem;
 }
+.loc-cell {
+  display: inline-block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  cursor: default;
+}
 {% endblock %}
 
 {% block content %}
@@ -226,10 +235,10 @@
       {% for unit in units %}
       <tr>
         <td class="unit-code">{{ unit.unit_code }}</td>
-        <td>{{ unit.crop_name }}</td>
-        <td>{{ unit.accession_code|default:"—" }}</td>
+        <td>{{ unit.display_crop }}</td>
+        <td>{{ unit.display_accession|default:"—" }}</td>
         <td>{{ unit.quantity }}</td>
-        <td>{{ unit.location_text|default:"—" }}</td>
+        <td><span class="loc-cell" title="{{ unit.display_location|default:"—" }}">{{ unit.display_location|default:"—" }}</span></td>
         <td>
           {% if unit.latest_observation %}
             <span class="obs-status status-{{ unit.latest_observation.status }}">{{ unit.latest_observation.get_status_display }}</span>

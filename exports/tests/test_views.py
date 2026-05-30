@@ -6,7 +6,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.test import TestCase, override_settings
 
-from inventory.models import TrackingUnit
+from inventory.models import (
+    Accession, Bench, Crop, Position, ScreenHouse, Site, TrackingUnit,
+)
 from monitoring.models import Observation, ObservationPhoto, QuantityEvent
 
 User = get_user_model()
@@ -299,3 +301,55 @@ class ExcelExportTest(TestCase):
     def test_photo_metadata_excel_has_correct_content_type(self):
         response = self.client.get('/exports/photo-metadata.xlsx/')
         self.assertEqual(response['Content-Type'], _XLSX_CONTENT_TYPE)
+
+
+# ── Phase 1B: structured columns in tracking units export ─────────────────────
+
+class TrackingUnitsStructuredColumnsTest(TestCase):
+
+    def setUp(self):
+        self.user = make_manager('exp_struct_mgr')
+        self.client.login(username='exp_struct_mgr', password=_PASSWORD)
+
+    def test_csv_has_structured_column_headers(self):
+        headers = csv_headers(self.client.get('/exports/tracking-units.csv/'))
+        for col in ['structured_crop', 'structured_accession', 'structured_batch', 'structured_location']:
+            self.assertIn(col, headers)
+
+    def test_csv_still_has_legacy_column_headers(self):
+        headers = csv_headers(self.client.get('/exports/tracking-units.csv/'))
+        for col in ['crop_name', 'accession_code', 'batch_code', 'location_text']:
+            self.assertIn(col, headers)
+
+    def test_csv_structured_crop_populated_when_fk_linked(self):
+        crop = Crop.objects.create(name='Export Cassava')
+        make_unit('TU-STRUCT-001', crop_name='Legacy Cassava', crop=crop)
+        response = self.client.get('/exports/tracking-units.csv/')
+        content = response.content.decode()
+        self.assertIn('Export Cassava', content)
+        self.assertIn('Legacy Cassava', content)
+
+    def test_csv_structured_crop_empty_when_no_fk(self):
+        make_unit('TU-STRUCT-002', crop_name='Only Legacy Crop')
+        response = self.client.get('/exports/tracking-units.csv/')
+        reader = csv.reader(StringIO(response.content.decode()))
+        headers = next(reader)
+        struct_crop_idx = headers.index('structured_crop')
+        for row in reader:
+            if row and 'TU-STRUCT-002' in row[0]:
+                self.assertEqual(row[struct_crop_idx], '')
+
+    def test_csv_structured_location_populated_when_position_linked(self):
+        site, _ = Site.objects.get_or_create(name='Export Site')
+        sh, _ = ScreenHouse.objects.get_or_create(site=site, name='ESH1')
+        bench, _ = Bench.objects.get_or_create(screen_house=sh, name='EBench A')
+        pos, _ = Position.objects.get_or_create(bench=bench, code='EP1')
+        make_unit('TU-STRUCT-003', location_text='Old location', position=pos)
+        response = self.client.get('/exports/tracking-units.csv/')
+        self.assertIn('Export Site / ESH1 / EBench A / EP1', response.content.decode())
+
+    def test_tracking_units_excel_returns_200_with_structured_columns(self):
+        crop = Crop.objects.create(name='Excel Cassava')
+        make_unit('TU-STRUCT-XL-001', crop_name='Excel Cassava', crop=crop)
+        response = self.client.get('/exports/tracking-units.xlsx/')
+        self.assertEqual(response.status_code, 200)

@@ -3,34 +3,108 @@
 {% block title %}Inventory — Screen House Guardian{% endblock %}
 
 {% block extra_style %}
-.page-card {
+.inv-heading { margin-bottom: 1.25rem; }
+.inv-heading h2 { margin: 0 0 0.25rem; font-size: 1.4rem; }
+.inv-heading p { margin: 0; color: #666; font-size: 0.9rem; }
+.inv-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.75rem;
+}
+.inv-card {
   background: #fff;
   border: 1px solid #ddd;
   border-radius: 6px;
-  padding: 1.25rem 1.5rem;
+  padding: 1rem 1.25rem;
+  min-width: 140px;
+  flex: 1;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s;
 }
-.page-card h2 {
-  margin: 0 0 0.5rem;
-  font-size: 1.5rem;
+.inv-card:hover { border-color: #2e7d32; }
+.inv-card .inv-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #2e7d32;
+  line-height: 1.1;
 }
-.page-card p {
-  margin: 0 0 0.75rem;
-  color: #555;
+.inv-card .inv-label {
+  font-size: 0.78rem;
+  color: #666;
+  margin-top: 0.2rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
-.page-card a {
+.inv-card .inv-action {
+  margin-top: 0.5rem;
+  font-size: 0.82rem;
   color: #2e7d32;
   font-weight: 600;
-  text-decoration: none;
 }
-.page-card a:hover {
-  text-decoration: underline;
+.inv-section {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
 }
+.inv-section h3 { margin: 0 0 0.5rem; font-size: 1rem; color: #333; }
+.inv-section p { margin: 0; color: #666; font-size: 0.9rem; }
+.inv-section a { color: #2e7d32; font-weight: 600; text-decoration: none; }
+.inv-section a:hover { text-decoration: underline; }
 {% endblock %}
 
 {% block content %}
-<div class="page-card">
+<div class="inv-heading">
   <h2>Inventory</h2>
-  <p>Phase 1A inventory workflow is still lean. Use Django admin to create and manage tracking units for now.</p>
-  <p><a href="{% url 'admin:inventory_trackingunit_changelist' %}">Open Tracking Units in admin</a></p>
+  <p>Phase 1B — Structured crop, accession, and batch records.</p>
+</div>
+
+<div class="inv-grid">
+  <a class="inv-card" href="{% url 'inventory:crops' %}">
+    <div class="inv-value">{{ crop_count }}</div>
+    <div class="inv-label">Crops</div>
+    <div class="inv-action">View →</div>
+  </a>
+  <a class="inv-card" href="{% url 'inventory:accessions' %}">
+    <div class="inv-value">{{ accession_count }}</div>
+    <div class="inv-label">Accessions</div>
+    <div class="inv-action">View →</div>
+  </a>
+  <a class="inv-card" href="{% url 'inventory:batches' %}">
+    <div class="inv-value">{{ batch_count }}</div>
+    <div class="inv-label">Batches</div>
+    <div class="inv-action">View →</div>
+  </a>
+  <a class="inv-card" href="{% url 'dashboard:index' %}">
+    <div class="inv-value">{{ unit_count }}</div>
+    <div class="inv-label">Active Units</div>
+    <div class="inv-action">Dashboard →</div>
+  </a>
+</div>
+
+<div class="inv-section">
+  <h3>Location hierarchy</h3>
+  <p>
+    Sites, Screen Houses, Benches, and Positions are managed in the
+    {% if show_manager_links %}
+      <a href="/admin/inventory/site/">Django admin</a>.
+    {% else %}
+      Django admin (Manager access required).
+    {% endif %}
+  </p>
+</div>
+
+<div class="inv-section">
+  <h3>Tracking units</h3>
+  <p>
+    Create and manage QR-labelled tracking units from the
+    <a href="{% url 'dashboard:index' %}">dashboard</a>.
+    {% if show_manager_links %}
+      Use the <a href="/admin/inventory/trackingunit/add/">admin</a> to create new units.
+    {% endif %}
+  </p>
 </div>
 {% endblock %}
