@@ -118,6 +118,38 @@
   white-space: nowrap;
 }
 .action-links a:hover { background: #e8f5e9; }
+.action-btn-link {
+  display: inline-block;
+  font-size: 0.78rem;
+  color: #2e7d32;
+  text-decoration: none;
+  border: 1px solid #a5d6a7;
+  border-radius: 3px;
+  padding: 0.15rem 0.45rem;
+  margin-right: 0.25rem;
+  white-space: nowrap;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+.action-btn-link:hover { background: #e8f5e9; }
+.dash-action-btn {
+  display: inline-block;
+  background: #2e7d32;
+  color: #fff;
+  padding: 0.45rem 1rem;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.dash-action-btn:hover { background: #1b5e20; }
+.dash-action-btn.secondary {
+  background: #fff;
+  color: #2e7d32;
+  border: 1px solid #2e7d32;
+}
+.dash-action-btn.secondary:hover { background: #f1f8e9; }
 .empty-state {
   text-align: center;
   padding: 2rem;
@@ -130,6 +162,14 @@
 <div class="dashboard-heading">
   <h2>Active Units Dashboard</h2>
   <p>Phase 1A — Active tracking units and latest observation status.</p>
+  <div class="dashboard-actions" style="margin-top:0.6rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+    {% if show_manager_links %}
+      <a href="{% url 'exports:index' %}" class="dash-action-btn">Export data</a>
+    {% endif %}
+    {% if show_staff_links %}
+      <a href="/admin/inventory/trackingunit/add/" class="dash-action-btn secondary">Create unit in admin</a>
+    {% endif %}
+  </div>
 </div>
 
 <div class="summary-grid">
@@ -199,6 +239,13 @@
         </td>
         <td class="action-links">
           <a href="{% url 'qr:label' unit_code=unit.unit_code %}">QR label</a>
+          {% if show_manager_links and not unit.qr_code %}
+            <form method="post" action="{% url 'qr:generate' unit_code=unit.unit_code %}" style="display:inline;">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{% url 'dashboard:index' %}">
+              <button type="submit" class="action-btn-link">Generate QR</button>
+            </form>
+          {% endif %}
           <a href="{% url 'observe' unit_code=unit.unit_code %}">Observe</a>
           <a href="{% url 'observe_timeline' unit_code=unit.unit_code %}">Timeline</a>
         </td>

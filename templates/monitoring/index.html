@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Monitoring — Screen House Guardian{% endblock %}
+
+{% block extra_style %}
+.page-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+}
+.page-card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+}
+.page-card p {
+  margin: 0 0 0.75rem;
+  color: #555;
+}
+.page-card code {
+  background: #f1f3f5;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+}
+{% endblock %}
+
+{% block content %}
+<div class="page-card">
+  <h2>Monitoring</h2>
+  <p>Use <code>/observe/&lt;unit_code&gt;/</code> to record an observation from a QR scan or direct link.</p>
+  <p>Observation history is available at <code>/observe/&lt;unit_code&gt;/timeline/</code>.</p>
+</div>
+{% endblock %}

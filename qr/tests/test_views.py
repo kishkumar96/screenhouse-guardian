@@ -104,6 +104,28 @@ class GenerateViewTest(TestCase):
             fetch_redirect_response=False,
         )
 
+    def test_generate_redirects_to_next_when_provided(self):
+        response = self.client.post(
+            f'/qr/units/{self.unit.unit_code}/generate/',
+            data={'next': '/dashboard/'},
+        )
+        self.assertRedirects(
+            response,
+            '/dashboard/',
+            fetch_redirect_response=False,
+        )
+
+    def test_generate_ignores_unsafe_next_url(self):
+        response = self.client.post(
+            f'/qr/units/{self.unit.unit_code}/generate/',
+            data={'next': 'https://evil.example.com/'},
+        )
+        self.assertRedirects(
+            response,
+            f'/qr/units/{self.unit.unit_code}/label/',
+            fetch_redirect_response=False,
+        )
+
     def test_regenerate_updates_qr_and_unit_survives(self):
         self.client.post(f'/qr/units/{self.unit.unit_code}/generate/')
         self.client.post(f'/qr/units/{self.unit.unit_code}/generate/')

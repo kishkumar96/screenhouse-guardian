@@ -123,6 +123,7 @@
 <div class="tl-actions">
   <a href="{% url 'observe' unit_code=unit.unit_code %}">+ New observation</a>
   <a href="{% url 'qr:label' unit_code=unit.unit_code %}" class="secondary">QR label</a>
+  <a href="{% url 'dashboard:index' %}" class="secondary">Back to dashboard</a>
 </div>
 
 {% if observations %}

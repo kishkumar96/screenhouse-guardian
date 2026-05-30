@@ -287,6 +287,19 @@ class TimelineViewTest(TestCase):
         response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
         self.assertContains(response, f'/observe/{self.unit.unit_code}/')
 
+    def test_timeline_shows_back_to_dashboard_link(self):
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        self.assertContains(response, '/dashboard/')
+
+    def test_timeline_shows_unit_quantity(self):
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        self.assertContains(response, str(self.unit.quantity))
+
+    def test_timeline_shows_unit_location(self):
+        unit = make_unit('TU-TL-LOC-001', location_text='SH1 / Bench Z')
+        response = self.client.get(f'/observe/{unit.unit_code}/timeline/')
+        self.assertContains(response, 'SH1 / Bench Z')
+
 
 # ── Observe form — oversized photo rejection ──────────────────────────────────
 

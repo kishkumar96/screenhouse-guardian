@@ -17,6 +17,13 @@ def make_observer(username='dash_observer'):
     return user
 
 
+def make_manager(username='dash_manager'):
+    user = User.objects.create_user(username=username, password=_PASSWORD)
+    group, _ = Group.objects.get_or_create(name='Manager')
+    user.groups.add(group)
+    return user
+
+
 def make_unit(unit_code, **kwargs):
     defaults = dict(
         unit_type=TrackingUnit.UNIT_TYPE_CONTAINER,
@@ -127,3 +134,61 @@ class DashboardIndexTest(TestCase):
         make_observation(checked, status=Observation.STATUS_HEALTHY)
         response = self.client.get('/dashboard/')
         self.assertEqual(response.context['units_checked_today'], 1)
+
+
+class DashboardManagerLinksTest(TestCase):
+
+    def test_observer_does_not_see_export_link(self):
+        make_observer('dash_obs_noexp')
+        self.client.login(username='dash_obs_noexp', password=_PASSWORD)
+        response = self.client.get('/dashboard/')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context['show_manager_links'])
+        self.assertNotContains(response, 'Export data')
+
+    def test_manager_sees_export_link(self):
+        make_manager()
+        self.client.login(username='dash_manager', password=_PASSWORD)
+        response = self.client.get('/dashboard/')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['show_manager_links'])
+        self.assertContains(response, 'Export data')
+
+    def test_manager_sees_generate_qr_for_unit_without_qr(self):
+        make_manager()
+        self.client.login(username='dash_manager', password=_PASSWORD)
+        make_unit('TU-NOQR-MGR-001')
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, 'Generate QR')
+        self.assertContains(response, 'name="next" value="/dashboard/"', html=False)
+
+    def test_observer_does_not_see_generate_qr_button(self):
+        make_observer('dash_obs_noqr')
+        self.client.login(username='dash_obs_noqr', password=_PASSWORD)
+        make_unit('TU-NOQR-OBS-001')
+        response = self.client.get('/dashboard/')
+        self.assertNotContains(response, 'Generate QR')
+
+    def test_manager_does_not_see_generate_qr_for_unit_with_qr(self):
+        make_manager()
+        self.client.login(username='dash_manager', password=_PASSWORD)
+        unit = make_unit('TU-HASQR-MGR-001')
+        TrackingUnit.objects.filter(pk=unit.pk).update(qr_code='qr_codes/test.png')
+        response = self.client.get('/dashboard/')
+        self.assertNotContains(response, 'Generate QR')
+
+    def test_staff_user_sees_create_unit_admin_link(self):
+        user = User.objects.create_user(username='staff_dash', password=_PASSWORD, is_staff=True)
+        group, _ = Group.objects.get_or_create(name='Manager')
+        user.groups.add(group)
+        self.client.login(username='staff_dash', password=_PASSWORD)
+        response = self.client.get('/dashboard/')
+        self.assertTrue(response.context['show_staff_links'])
+        self.assertContains(response, 'Create unit in admin')
+
+    def test_non_staff_observer_does_not_see_admin_link(self):
+        make_observer('dash_obs_nostaff')
+        self.client.login(username='dash_obs_nostaff', password=_PASSWORD)
+        response = self.client.get('/dashboard/')
+        self.assertFalse(response.context['show_staff_links'])
+        self.assertNotContains(response, 'Create unit in admin')

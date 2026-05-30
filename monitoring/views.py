@@ -1,5 +1,4 @@
 from django.contrib import messages
-from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from config.permissions import observer_required
@@ -10,7 +9,7 @@ from .models import Observation
 
 @observer_required
 def index(request):
-    return HttpResponse('<h1>Monitoring</h1><p>Use <code>/observe/&lt;unit_code&gt;/</code> to record an observation.</p>')
+    return render(request, 'monitoring/index.html')
 
 
 @observer_required

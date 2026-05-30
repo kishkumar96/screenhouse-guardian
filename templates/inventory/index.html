@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Inventory — Screen House Guardian{% endblock %}
+
+{% block extra_style %}
+.page-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+}
+.page-card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+}
+.page-card p {
+  margin: 0 0 0.75rem;
+  color: #555;
+}
+.page-card a {
+  color: #2e7d32;
+  font-weight: 600;
+  text-decoration: none;
+}
+.page-card a:hover {
+  text-decoration: underline;
+}
+{% endblock %}
+
+{% block content %}
+<div class="page-card">
+  <h2>Inventory</h2>
+  <p>Phase 1A inventory workflow is still lean. Use Django admin to create and manage tracking units for now.</p>
+  <p><a href="{% url 'admin:inventory_trackingunit_changelist' %}">Open Tracking Units in admin</a></p>
+</div>
+{% endblock %}
