@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Observation, ObservationPhoto
+from .models import Observation, ObservationPhoto, QuantityEvent
 
 
 class ObservationForm(forms.ModelForm):
@@ -87,3 +87,107 @@ class ObservationPhotoForm(forms.ModelForm):
         widgets = {
             'caption': forms.TextInput(attrs={'placeholder': 'Optional caption'}),
         }
+
+
+class QuantityEventForm(forms.Form):
+    """
+    Form for recording a quantity event (death, loss, recount, correction).
+
+    Pass current_quantity so validation can check for negative results and
+    handle the recount case (where the user enters physical_quantity and the
+    change is computed automatically).
+    """
+
+    ALLOWED_EVENT_TYPES = [
+        (QuantityEvent.EVENT_TYPE_DEATH, 'Death / Culling'),
+        (QuantityEvent.EVENT_TYPE_LOSS, 'Loss'),
+        (QuantityEvent.EVENT_TYPE_RECOUNT, 'Recount'),
+        (QuantityEvent.EVENT_TYPE_CORRECTION, 'Correction'),
+    ]
+
+    event_type = forms.ChoiceField(
+        choices=ALLOWED_EVENT_TYPES,
+        label='Event type',
+    )
+    quantity_change = forms.IntegerField(
+        required=False,
+        label='Quantity change',
+        help_text=(
+            'Enter a negative number for deaths/losses (e.g. −3 means three died). '
+            'Corrections may be positive or negative.'
+        ),
+    )
+    physical_quantity = forms.IntegerField(
+        required=False,
+        min_value=0,
+        label='Physical count',
+        help_text='Enter the quantity you physically counted. The difference is computed automatically.',
+    )
+    reason = forms.CharField(
+        required=True,
+        label='Reason',
+        widget=forms.Textarea(attrs={'rows': 3, 'placeholder': 'Briefly describe the reason for this change…'}),
+        help_text='Required. Used for the audit trail.',
+    )
+
+    def __init__(self, *args, current_quantity=None, **kwargs):
+        if args:
+            data = args[0]
+            if data is not None and hasattr(data, 'copy'):
+                data = data.copy()
+                event_type = data.get('event_type')
+                if event_type == QuantityEvent.EVENT_TYPE_RECOUNT:
+                    data['quantity_change'] = ''
+                else:
+                    data['physical_quantity'] = ''
+                args = (data, *args[1:])
+        super().__init__(*args, **kwargs)
+        self._current_quantity = current_quantity
+
+    def clean(self):
+        cleaned = super().clean()
+        event_type = cleaned.get('event_type')
+        quantity_change = cleaned.get('quantity_change')
+        physical_quantity = cleaned.get('physical_quantity')
+        current = self._current_quantity
+
+        if not event_type:
+            return cleaned
+
+        if event_type == QuantityEvent.EVENT_TYPE_RECOUNT:
+            if physical_quantity is None:
+                self.add_error('physical_quantity', 'Physical count is required for recount.')
+            elif current is not None:
+                computed = physical_quantity - current
+                if computed == 0:
+                    self.add_error(
+                        'physical_quantity',
+                        'Physical count matches current quantity — no change to record.',
+                    )
+                else:
+                    cleaned['quantity_change'] = computed
+        else:
+            if quantity_change is None:
+                self.add_error('quantity_change', 'Quantity change is required.')
+            elif quantity_change == 0:
+                self.add_error('quantity_change', 'Quantity change cannot be zero.')
+            elif event_type in (
+                QuantityEvent.EVENT_TYPE_DEATH,
+                QuantityEvent.EVENT_TYPE_LOSS,
+            ) and quantity_change > 0:
+                self.add_error(
+                    'quantity_change',
+                    f'Quantity change must be negative for {event_type} events.',
+                )
+            elif (
+                current is not None
+                and quantity_change is not None
+                and current + quantity_change < 0
+            ):
+                self.add_error(
+                    'quantity_change',
+                    f'Would result in a negative quantity '
+                    f'({current} + {quantity_change} = {current + quantity_change}).',
+                )
+
+        return cleaned

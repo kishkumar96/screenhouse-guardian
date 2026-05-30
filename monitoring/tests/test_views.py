@@ -6,7 +6,7 @@ from django.contrib.auth.models import Group
 from django.test import TestCase, override_settings
 
 from inventory.models import TrackingUnit
-from monitoring.models import MAX_OBSERVATION_IMAGE_SIZE_BYTES, Observation, ObservationPhoto
+from monitoring.models import MAX_OBSERVATION_IMAGE_SIZE_BYTES, Observation, ObservationPhoto, QuantityEvent
 
 User = get_user_model()
 
@@ -18,6 +18,13 @@ _PASSWORD = 'testpass123'
 def make_observer(username='mon_observer'):
     user = User.objects.create_user(username=username, password=_PASSWORD)
     group, _ = Group.objects.get_or_create(name='Observer')
+    user.groups.add(group)
+    return user
+
+
+def make_manager(username='mon_manager'):
+    user = User.objects.create_user(username=username, password=_PASSWORD)
+    group, _ = Group.objects.get_or_create(name='Manager')
     user.groups.add(group)
     return user
 
@@ -394,3 +401,342 @@ class TimelinePhotoTest(TestCase):
         ObservationPhoto.objects.filter(pk=photo.pk).update(thumbnail='')
         response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
         self.assertContains(response, 'observation_photos')
+
+
+# ── Quantity event form — access ──────────────────────────────────────────────
+
+def _qty_url(unit_code):
+    return f'/monitoring/units/{unit_code}/quantity-event/'
+
+
+class QuantityEventAccessTest(TestCase):
+
+    def setUp(self):
+        self.unit = make_unit('TU-QA-001', quantity=20)
+
+    def test_anonymous_redirects_to_login(self):
+        response = self.client.get(_qty_url(self.unit.unit_code))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+    def test_observer_gets_403(self):
+        make_observer()
+        self.client.login(username='mon_observer', password=_PASSWORD)
+        response = self.client.get(_qty_url(self.unit.unit_code))
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_gets_200(self):
+        make_manager()
+        self.client.login(username='mon_manager', password=_PASSWORD)
+        response = self.client.get(_qty_url(self.unit.unit_code))
+        self.assertEqual(response.status_code, 200)
+
+    def test_missing_unit_returns_404(self):
+        make_manager()
+        self.client.login(username='mon_manager', password=_PASSWORD)
+        response = self.client.get(_qty_url('NO-SUCH-UNIT'))
+        self.assertEqual(response.status_code, 404)
+
+
+# ── Quantity event form — display ─────────────────────────────────────────────
+
+class QuantityEventFormDisplayTest(TestCase):
+
+    def setUp(self):
+        make_manager()
+        self.client.login(username='mon_manager', password=_PASSWORD)
+        self.unit = make_unit(
+            'TU-QD-001',
+            crop_name='Display Cassava',
+            location_text='SH1 / Bay D',
+            quantity=25,
+        )
+
+    def test_shows_unit_code(self):
+        response = self.client.get(_qty_url(self.unit.unit_code))
+        self.assertContains(response, self.unit.unit_code)
+
+    def test_shows_current_quantity(self):
+        response = self.client.get(_qty_url(self.unit.unit_code))
+        self.assertContains(response, '25')
+
+    def test_shows_display_crop(self):
+        response = self.client.get(_qty_url(self.unit.unit_code))
+        self.assertContains(response, 'Display Cassava')
+
+    def test_shows_display_location(self):
+        response = self.client.get(_qty_url(self.unit.unit_code))
+        self.assertContains(response, 'SH1 / Bay D')
+
+    def test_contains_allowed_event_types(self):
+        response = self.client.get(_qty_url(self.unit.unit_code))
+        for value in ('death', 'loss', 'recount', 'correction'):
+            self.assertContains(response, value)
+
+    def test_does_not_expose_forbidden_event_types(self):
+        response = self.client.get(_qty_url(self.unit.unit_code))
+        for value in ('initial', 'split', 'merge', 'distribution'):
+            self.assertNotContains(response, f'value="{value}"')
+
+
+# ── Quantity event form — POST helpers ────────────────────────────────────────
+
+class QuantityEventPostBase(TestCase):
+
+    def setUp(self):
+        self.manager = make_manager()
+        self.client.login(username='mon_manager', password=_PASSWORD)
+        self.unit = make_unit('TU-QP-001', quantity=20)
+
+    def _post(self, data):
+        return self.client.post(_qty_url(self.unit.unit_code), data)
+
+    def _refresh(self):
+        self.unit.refresh_from_db()
+
+
+# ── Death / Loss tests ────────────────────────────────────────────────────────
+
+class QuantityEventDeathLossTest(QuantityEventPostBase):
+
+    def test_manager_submits_death_event_quantity_decreases(self):
+        self._post({'event_type': 'death', 'quantity_change': '-3', 'reason': 'Culling'})
+        self._refresh()
+        self.assertEqual(self.unit.quantity, 17)
+
+    def test_death_event_creates_quantity_event_record(self):
+        self._post({'event_type': 'death', 'quantity_change': '-3', 'reason': 'Culling'})
+        event = QuantityEvent.objects.get(tracking_unit=self.unit)
+        self.assertEqual(event.event_type, QuantityEvent.EVENT_TYPE_DEATH)
+        self.assertEqual(event.quantity_before, 20)
+        self.assertEqual(event.quantity_change, -3)
+        self.assertEqual(event.quantity_after, 17)
+
+    def test_death_event_records_reason(self):
+        self._post({'event_type': 'death', 'quantity_change': '-5', 'reason': 'Storm damage'})
+        event = QuantityEvent.objects.get(tracking_unit=self.unit)
+        self.assertEqual(event.reason, 'Storm damage')
+
+    def test_positive_death_quantity_change_rejected(self):
+        response = self._post({'event_type': 'death', 'quantity_change': '3', 'reason': 'Test'})
+        self.assertEqual(response.status_code, 200)
+        self._refresh()
+        self.assertEqual(self.unit.quantity, 20)
+        self.assertEqual(QuantityEvent.objects.filter(tracking_unit=self.unit).count(), 0)
+
+    def test_loss_event_decreases_quantity(self):
+        self._post({'event_type': 'loss', 'quantity_change': '-2', 'reason': 'Theft'})
+        self._refresh()
+        self.assertEqual(self.unit.quantity, 18)
+
+    def test_loss_creates_quantity_event(self):
+        self._post({'event_type': 'loss', 'quantity_change': '-2', 'reason': 'Theft'})
+        event = QuantityEvent.objects.get(tracking_unit=self.unit)
+        self.assertEqual(event.event_type, QuantityEvent.EVENT_TYPE_LOSS)
+
+    def test_death_redirects_to_timeline_on_success(self):
+        response = self._post({'event_type': 'death', 'quantity_change': '-1', 'reason': 'R'})
+        self.assertRedirects(
+            response,
+            f'/observe/{self.unit.unit_code}/timeline/',
+            fetch_redirect_response=False,
+        )
+
+    def test_success_message_shows_before_and_after(self):
+        response = self._post({'event_type': 'death', 'quantity_change': '-3', 'reason': 'R'})
+        # Follow redirect to get messages
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        self.assertContains(response, '20')
+        self.assertContains(response, '17')
+
+    def test_death_event_sets_created_by(self):
+        self._post({'event_type': 'death', 'quantity_change': '-1', 'reason': 'R'})
+        event = QuantityEvent.objects.get(tracking_unit=self.unit)
+        self.assertEqual(event.created_by, self.manager)
+
+
+# ── Correction tests ──────────────────────────────────────────────────────────
+
+class QuantityEventCorrectionTest(QuantityEventPostBase):
+
+    def test_correction_can_increase_quantity(self):
+        self._post({'event_type': 'correction', 'quantity_change': '5', 'reason': 'Found more'})
+        self._refresh()
+        self.assertEqual(self.unit.quantity, 25)
+
+    def test_correction_can_decrease_quantity(self):
+        self._post({'event_type': 'correction', 'quantity_change': '-4', 'reason': 'Recounted'})
+        self._refresh()
+        self.assertEqual(self.unit.quantity, 16)
+
+    def test_correction_resulting_in_negative_rejected(self):
+        response = self._post({'event_type': 'correction', 'quantity_change': '-25', 'reason': 'R'})
+        self.assertEqual(response.status_code, 200)
+        self._refresh()
+        self.assertEqual(self.unit.quantity, 20)
+        self.assertEqual(QuantityEvent.objects.filter(tracking_unit=self.unit).count(), 0)
+
+
+# ── Recount tests ─────────────────────────────────────────────────────────────
+
+class QuantityEventRecountTest(QuantityEventPostBase):
+
+    def test_recount_lower_creates_negative_change(self):
+        self._post({'event_type': 'recount', 'physical_quantity': '15', 'reason': 'Manual count'})
+        event = QuantityEvent.objects.get(tracking_unit=self.unit)
+        self.assertEqual(event.quantity_change, -5)
+        self.assertEqual(event.quantity_after, 15)
+
+    def test_recount_higher_creates_positive_change(self):
+        self._post({'event_type': 'recount', 'physical_quantity': '23', 'reason': 'Manual count'})
+        event = QuantityEvent.objects.get(tracking_unit=self.unit)
+        self.assertEqual(event.quantity_change, 3)
+        self.assertEqual(event.quantity_after, 23)
+
+    def test_recount_same_as_current_rejected(self):
+        response = self._post({'event_type': 'recount', 'physical_quantity': '20', 'reason': 'R'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(QuantityEvent.objects.filter(tracking_unit=self.unit).count(), 0)
+
+    def test_recount_negative_physical_quantity_rejected(self):
+        response = self._post({'event_type': 'recount', 'physical_quantity': '-5', 'reason': 'R'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(QuantityEvent.objects.filter(tracking_unit=self.unit).count(), 0)
+
+    def test_recount_updates_unit_quantity(self):
+        self._post({'event_type': 'recount', 'physical_quantity': '18', 'reason': 'R'})
+        self._refresh()
+        self.assertEqual(self.unit.quantity, 18)
+
+    def test_recount_ignores_submitted_quantity_change_and_uses_physical_quantity(self):
+        self._post({
+            'event_type': 'recount',
+            'quantity_change': '999',
+            'physical_quantity': '15',
+            'reason': 'Manual count',
+        })
+        event = QuantityEvent.objects.get(tracking_unit=self.unit)
+        self.assertEqual(event.quantity_change, -5)
+        self.assertEqual(event.quantity_after, 15)
+
+    def test_recount_with_invalid_quantity_change_still_succeeds_when_physical_quantity_valid(self):
+        response = self._post({
+            'event_type': 'recount',
+            'quantity_change': 'not-an-integer',
+            'physical_quantity': '17',
+            'reason': 'Manual count',
+        })
+        self.assertRedirects(
+            response,
+            f'/observe/{self.unit.unit_code}/timeline/',
+            fetch_redirect_response=False,
+        )
+        event = QuantityEvent.objects.get(tracking_unit=self.unit)
+        self.assertEqual(event.quantity_change, -3)
+
+
+# ── Validation tests ──────────────────────────────────────────────────────────
+
+class QuantityEventValidationTest(QuantityEventPostBase):
+
+    def test_reason_required(self):
+        response = self._post({'event_type': 'death', 'quantity_change': '-1', 'reason': ''})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(QuantityEvent.objects.filter(tracking_unit=self.unit).count(), 0)
+
+    def test_zero_quantity_change_rejected(self):
+        response = self._post({'event_type': 'correction', 'quantity_change': '0', 'reason': 'R'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(QuantityEvent.objects.filter(tracking_unit=self.unit).count(), 0)
+
+    def test_negative_result_creates_no_event_and_leaves_quantity_unchanged(self):
+        unit = make_unit('TU-QV-NEG-001', quantity=3)
+        response = self.client.post(_qty_url(unit.unit_code), {
+            'event_type': 'death',
+            'quantity_change': '-5',
+            'reason': 'R',
+        })
+        self.assertEqual(response.status_code, 200)
+        unit.refresh_from_db()
+        self.assertEqual(unit.quantity, 3)
+        self.assertEqual(QuantityEvent.objects.filter(tracking_unit=unit).count(), 0)
+
+    def test_observer_post_gets_403(self):
+        make_observer()
+        self.client.login(username='mon_observer', password=_PASSWORD)
+        response = self._post({'event_type': 'death', 'quantity_change': '-1', 'reason': 'R'})
+        self.assertEqual(response.status_code, 403)
+        self._refresh()
+        self.assertEqual(self.unit.quantity, 20)
+
+    def test_missing_quantity_change_for_death_rejected(self):
+        response = self._post({'event_type': 'death', 'reason': 'R'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(QuantityEvent.objects.filter(tracking_unit=self.unit).count(), 0)
+
+    def test_death_ignores_submitted_physical_quantity(self):
+        response = self._post({
+            'event_type': 'death',
+            'quantity_change': '-2',
+            'physical_quantity': '999',
+            'reason': 'R',
+        })
+        self.assertRedirects(
+            response,
+            f'/observe/{self.unit.unit_code}/timeline/',
+            fetch_redirect_response=False,
+        )
+        event = QuantityEvent.objects.get(tracking_unit=self.unit)
+        self.assertEqual(event.quantity_change, -2)
+
+
+# ── Timeline — quantity events display ────────────────────────────────────────
+
+class TimelineQuantityEventsTest(TestCase):
+
+    def setUp(self):
+        self.manager = make_manager('tl_qty_manager')
+        self.observer = make_observer('tl_qty_observer')
+        self.unit = make_unit('TU-TL-QE-001', quantity=20)
+
+    def _create_event(self, quantity_change=-3, reason='Test reason'):
+        from monitoring.services import apply_quantity_event
+        return apply_quantity_event(
+            tracking_unit=self.unit,
+            event_type=QuantityEvent.EVENT_TYPE_DEATH,
+            quantity_change=quantity_change,
+            user=self.manager,
+            reason=reason,
+        )
+
+    def test_timeline_shows_quantity_events(self):
+        self._create_event()
+        self.client.login(username='tl_qty_observer', password=_PASSWORD)
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        self.assertContains(response, 'Death')
+
+    def test_timeline_shows_before_change_after_values(self):
+        self._create_event(quantity_change=-3)
+        self.client.login(username='tl_qty_observer', password=_PASSWORD)
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        content = response.content.decode()
+        self.assertIn('20', content)
+        self.assertIn('-3', content)
+        self.assertIn('17', content)
+
+    def test_timeline_shows_reason(self):
+        self._create_event(reason='Storm damage culling')
+        self.client.login(username='tl_qty_observer', password=_PASSWORD)
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        self.assertContains(response, 'Storm damage culling')
+
+    def test_timeline_manager_sees_record_quantity_change_link(self):
+        self.client.login(username='tl_qty_manager', password=_PASSWORD)
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        self.assertContains(response, 'Record quantity change')
+        self.assertContains(response, f'/monitoring/units/{self.unit.unit_code}/quantity-event/')
+
+    def test_timeline_observer_does_not_see_record_quantity_change_link(self):
+        self.client.login(username='tl_qty_observer', password=_PASSWORD)
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        self.assertNotContains(response, 'Record quantity change')

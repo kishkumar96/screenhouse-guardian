@@ -247,3 +247,39 @@ class DashboardDisplayPropertiesTest(TestCase):
         make_unit('TU-DISP-006', accession_code='LEGACY-ACC-006')
         response = self.client.get('/dashboard/')
         self.assertContains(response, 'LEGACY-ACC-006')
+
+
+# ── Dashboard Quantity action link ────────────────────────────────────────────
+
+class DashboardQuantityLinkTest(TestCase):
+
+    def setUp(self):
+        self.unit = make_unit('TU-DASH-QTY-001')
+
+    def test_manager_sees_quantity_link(self):
+        make_manager('dash_qty_mgr')
+        self.client.login(username='dash_qty_mgr', password=_PASSWORD)
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, f'/monitoring/units/{self.unit.unit_code}/quantity-event/')
+        self.assertContains(response, 'Quantity')
+
+    def test_observer_does_not_see_quantity_link(self):
+        make_observer('dash_qty_obs')
+        self.client.login(username='dash_qty_obs', password=_PASSWORD)
+        response = self.client.get('/dashboard/')
+        self.assertNotContains(response, f'/monitoring/units/{self.unit.unit_code}/quantity-event/')
+
+    def test_dashboard_quantity_reflects_quantity_event(self):
+        from monitoring.models import QuantityEvent
+        from monitoring.services import apply_quantity_event
+        manager = make_manager('dash_qty_upd_mgr')
+        self.client.login(username='dash_qty_upd_mgr', password=_PASSWORD)
+        apply_quantity_event(
+            tracking_unit=self.unit,
+            event_type=QuantityEvent.EVENT_TYPE_DEATH,
+            quantity_change=-5,
+            user=manager,
+            reason='Field culling',
+        )
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, str(10 - 5))

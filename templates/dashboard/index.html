@@ -264,6 +264,9 @@
           {% endif %}
           <a href="{% url 'observe' unit_code=unit.unit_code %}">Observe</a>
           <a href="{% url 'observe_timeline' unit_code=unit.unit_code %}">Timeline</a>
+          {% if show_manager_links %}
+          <a href="{% url 'monitoring:create_quantity_event' unit_code=unit.unit_code %}">Quantity</a>
+          {% endif %}
         </td>
       </tr>
       {% empty %}

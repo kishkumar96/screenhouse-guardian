@@ -106,6 +106,37 @@
   color: #888;
   font-size: 0.95rem;
 }
+.qty-event-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-left: 3px solid #a5d6a7;
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.875rem;
+}
+.qty-event-type {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: #e8f5e9;
+  color: #2e7d32;
+  padding: 0.1rem 0.4rem;
+  border-radius: 10px;
+  margin-bottom: 0.3rem;
+}
+.qty-event-numbers {
+  font-family: monospace;
+  font-size: 0.9rem;
+  color: #333;
+  margin: 0.25rem 0;
+}
+.qty-event-change-neg { color: #c62828; }
+.qty-event-change-pos { color: #2e7d32; }
+.qty-event-meta { font-size: 0.8rem; color: #777; margin-top: 0.25rem; }
+.qty-event-reason { color: #555; font-style: italic; margin-top: 0.2rem; }
 {% endblock %}
 
 {% block content %}
@@ -121,9 +152,37 @@
 
 <div class="tl-actions">
   <a href="{% url 'observe' unit_code=unit.unit_code %}">+ New observation</a>
+  {% if show_manager_links %}
+  <a href="{% url 'monitoring:create_quantity_event' unit_code=unit.unit_code %}" class="secondary">Record quantity change</a>
+  {% endif %}
   <a href="{% url 'qr:label' unit_code=unit.unit_code %}" class="secondary">QR label</a>
   <a href="{% url 'dashboard:index' %}" class="secondary">Back to dashboard</a>
 </div>
+
+{% if quantity_events %}
+<h3 class="section-heading" style="margin-top:1.75rem;">Quantity History</h3>
+{% for event in quantity_events %}
+<div class="qty-event-card">
+  <span class="qty-event-type">{{ event.get_event_type_display }}</span>
+  <div class="qty-event-numbers">
+    {{ event.quantity_before }}
+    {% if event.quantity_change < 0 %}
+      <span class="qty-event-change-neg"> {{ event.quantity_change }} </span>
+    {% else %}
+      <span class="qty-event-change-pos"> +{{ event.quantity_change }} </span>
+    {% endif %}
+    → {{ event.quantity_after }}
+  </div>
+  {% if event.reason %}<p class="qty-event-reason">"{{ event.reason }}"</p>{% endif %}
+  <p class="qty-event-meta">
+    {{ event.event_date|date:"d M Y, H:i" }}
+    {% if event.created_by %} — {{ event.created_by.get_full_name|default:event.created_by.username }}{% endif %}
+  </p>
+</div>
+{% endfor %}
+{% endif %}
+
+<h3 class="section-heading" {% if quantity_events %}style="margin-top:1.75rem;"{% endif %}>Observations</h3>
 
 {% if observations %}
   {% for obs in observations %}
@@ -181,4 +240,5 @@
     <a href="{% url 'observe' unit_code=unit.unit_code %}">Record the first observation</a>
   </div>
 {% endif %}
+
 {% endblock %}

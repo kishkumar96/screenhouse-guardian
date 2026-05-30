@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}Record Quantity Change — {{ unit.unit_code }}{% endblock %}
+
+{% block extra_style %}
+.qty-unit-banner {
+  background: #e8f5e9;
+  border-left: 4px solid #2e7d32;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  border-radius: 0 4px 4px 0;
+}
+.qty-unit-banner h2 { margin: 0 0 0.2rem; font-size: 1.2rem; }
+.qty-unit-meta { font-size: 0.85rem; color: #555; margin: 0.15rem 0 0; }
+.qty-current {
+  display: inline-block;
+  background: #fff;
+  border: 1px solid #a5d6a7;
+  border-radius: 4px;
+  padding: 0.15rem 0.55rem;
+  font-weight: 700;
+  color: #2e7d32;
+  font-size: 1rem;
+}
+.qty-form-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+.qty-form-card h3 {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #555;
+}
+.form-group { margin-bottom: 1rem; }
+.form-group label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+.form-group input[type=number],
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+}
+.form-group select { background: #fff; }
+.form-group textarea { resize: vertical; }
+.form-group .errorlist {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0;
+  color: #c62828;
+  font-size: 0.85rem;
+}
+.form-group .help-text {
+  font-size: 0.8rem;
+  color: #777;
+  margin: 0.2rem 0 0;
+}
+.event-type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+@media (min-width: 400px) {
+  .event-type-grid { grid-template-columns: repeat(4, 1fr); }
+}
+.event-type-btn {
+  padding: 0.6rem 0.4rem;
+  border: 2px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  text-align: center;
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: border-color 0.15s, background 0.15s;
+}
+.event-type-btn:hover { border-color: #2e7d32; }
+.event-type-btn.selected { border-color: #2e7d32; background: #e8f5e9; }
+.event-type-btn input[type=radio] { display: none; }
+.submit-btn {
+  display: block;
+  width: 100%;
+  padding: 0.9rem;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 1rem;
+}
+.submit-btn:hover { background: #1b5e20; }
+.non-field-errors {
+  background: #fce4ec;
+  border: 1px solid #e91e63;
+  color: #880e4f;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+.back-link {
+  display: inline-block;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: #555;
+  text-decoration: none;
+}
+.back-link:hover { text-decoration: underline; }
+.form-note {
+  font-size: 0.82rem;
+  color: #666;
+  margin-top: 0.5rem;
+}
+{% endblock %}
+
+{% block content %}
+<div class="qty-unit-banner">
+  <h2>{{ unit.unit_code }} — {{ unit.display_crop }}</h2>
+  <p class="qty-unit-meta">
+    Current quantity: <span class="qty-current">{{ unit.quantity }}</span>
+  </p>
+  <p class="qty-unit-meta">
+    {% if unit.display_accession %}{{ unit.display_accession }} · {% endif %}
+    {% if unit.display_batch %}{{ unit.display_batch }} · {% endif %}
+    {% if unit.display_location %}{{ unit.display_location }}{% endif %}
+  </p>
+  <p class="form-note">
+    Quantity changes are recorded separately from biological observations in Phase 1A.
+  </p>
+</div>
+
+{% if form.non_field_errors %}
+<div class="non-field-errors">
+  {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+</div>
+{% endif %}
+
+<form method="post" novalidate>
+  {% csrf_token %}
+
+  <div class="qty-form-card">
+    <h3>Event type</h3>
+    <div class="event-type-grid" id="event-type-grid">
+      {% for value, label in form.event_type.field.choices %}
+      <label class="event-type-btn {% if form.event_type.value == value %}selected{% endif %}">
+        <input type="radio" name="event_type" value="{{ value }}"
+               {% if form.event_type.value == value %}checked{% endif %}>
+        {{ label }}
+      </label>
+      {% endfor %}
+    </div>
+    {% if form.event_type.errors %}
+    <ul class="errorlist" style="margin-top:0.5rem;">
+      {% for e in form.event_type.errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <div class="qty-form-card">
+    <h3>Quantity</h3>
+
+    {# quantity_change: shown for death / loss / correction #}
+    <div class="form-group" id="quantity-change-row">
+      <label for="{{ form.quantity_change.id_for_label }}">{{ form.quantity_change.label }}</label>
+      {{ form.quantity_change }}
+      <p class="help-text">{{ form.quantity_change.help_text }}</p>
+      {% if form.quantity_change.errors %}
+      <ul class="errorlist">{% for e in form.quantity_change.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+
+    {# physical_quantity: shown for recount only #}
+    <div class="form-group" id="physical-quantity-row" style="display: none;">
+      <label for="{{ form.physical_quantity.id_for_label }}">{{ form.physical_quantity.label }}</label>
+      {{ form.physical_quantity }}
+      <p class="help-text">
+        {{ form.physical_quantity.help_text }}
+        <br>Current recorded quantity: <strong>{{ unit.quantity }}</strong>
+      </p>
+      {% if form.physical_quantity.errors %}
+      <ul class="errorlist">{% for e in form.physical_quantity.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="qty-form-card">
+    <h3>Reason</h3>
+    <div class="form-group">
+      {{ form.reason }}
+      <p class="help-text">{{ form.reason.help_text }}</p>
+      {% if form.reason.errors %}
+      <ul class="errorlist">{% for e in form.reason.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+  </div>
+
+  <button type="submit" class="submit-btn">Save quantity change</button>
+</form>
+
+<a class="back-link" href="{% url 'observe_timeline' unit_code=unit.unit_code %}">&larr; Back to timeline</a>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  var RECOUNT = 'recount';
+
+  function updateFields() {
+    var selected = document.querySelector('#event-type-grid input[type=radio]:checked');
+    var eventType = selected ? selected.value : '';
+    var changeRow = document.getElementById('quantity-change-row');
+    var physRow = document.getElementById('physical-quantity-row');
+    var quantityChangeInput = document.getElementById('{{ form.quantity_change.id_for_label }}');
+    var physicalQuantityInput = document.getElementById('{{ form.physical_quantity.id_for_label }}');
+    if (eventType === RECOUNT) {
+      changeRow.style.display = 'none';
+      physRow.style.display = '';
+      if (quantityChangeInput) {
+        quantityChangeInput.disabled = true;
+      }
+      if (physicalQuantityInput) {
+        physicalQuantityInput.disabled = false;
+      }
+    } else {
+      changeRow.style.display = '';
+      physRow.style.display = 'none';
+      if (quantityChangeInput) {
+        quantityChangeInput.disabled = false;
+      }
+      if (physicalQuantityInput) {
+        physicalQuantityInput.disabled = true;
+      }
+    }
+  }
+
+  document.querySelectorAll('#event-type-grid .event-type-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('#event-type-grid .event-type-btn').forEach(function (b) {
+        b.classList.remove('selected');
+      });
+      this.classList.add('selected');
+      updateFields();
+    });
+  });
+
+  updateFields();
+}());
+</script>
+{% endblock %}
