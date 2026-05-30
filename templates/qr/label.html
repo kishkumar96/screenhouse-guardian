@@ -4,27 +4,30 @@
 
 {% block extra_style %}
 .label-card {
-  max-width: 320px;
+  max-width: 340px;
   margin: 1rem auto;
   border: 1px solid #ccc;
   border-radius: 6px;
   padding: 1.25rem;
   background: #fff;
 }
-.label-card h2 {
+.label-unit-code {
+  font-family: monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   margin: 0 0 0.75rem;
-  font-size: 1.4rem;
-  letter-spacing: 0.05em;
+  word-break: break-all;
 }
 .label-qr {
   display: block;
-  width: 200px;
-  height: 200px;
+  width: 220px;
+  height: 220px;
   margin: 0 auto 1rem;
 }
 .label-qr-missing {
-  width: 200px;
-  height: 200px;
+  width: 220px;
+  height: 220px;
   margin: 0 auto 1rem;
   border: 2px dashed #ccc;
   display: flex;
@@ -32,6 +35,15 @@
   justify-content: center;
   color: #888;
   font-size: 0.85rem;
+  text-align: center;
+}
+.scan-instruction {
+  text-align: center;
+  font-weight: 700;
+  font-size: 1rem;
+  margin: 0.75rem 0;
+  letter-spacing: 0.03em;
+  color: #2e7d32;
 }
 .label-meta {
   list-style: none;
@@ -43,13 +55,6 @@
 }
 .label-meta li { margin-bottom: 0.3rem; }
 .label-meta .key { font-weight: 600; display: inline-block; min-width: 90px; }
-.scan-instruction {
-  text-align: center;
-  font-weight: 700;
-  font-size: 1rem;
-  margin: 0.75rem 0;
-  letter-spacing: 0.03em;
-}
 .label-actions { margin-top: 1rem; }
 .label-actions button {
   background: #2e7d32;
@@ -61,24 +66,46 @@
   font-size: 0.9rem;
 }
 .label-actions button:hover { background: #1b5e20; }
+.label-back {
+  display: inline-block;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: #555;
+  text-decoration: none;
+}
+.label-back:hover { text-decoration: underline; }
 
 @media print {
-  .site-header, footer, .label-actions, nav { display: none !important; }
-  .label-card { border: none; box-shadow: none; margin: 0; padding: 0; }
+  .site-header, footer, .label-actions, .label-back, nav { display: none !important; }
+  .label-card {
+    border: none;
+    box-shadow: none;
+    margin: 0;
+    padding: 0.5cm;
+    max-width: none;
+  }
+  .label-unit-code {
+    font-size: 2rem;
+  }
+  .label-qr {
+    width: 280px;
+    height: 280px;
+  }
   body { background: #fff; }
+  @page { margin: 1cm; }
 }
 {% endblock %}
 
 {% block content %}
 <div class="label-card">
-  <h2>{{ unit.unit_code }}</h2>
+  <h2 class="label-unit-code">{{ unit.unit_code }}</h2>
 
   {% if unit.qr_code %}
     <img class="label-qr"
          src="{{ unit.qr_code.url }}"
          alt="QR code for {{ unit.unit_code }}">
   {% else %}
-    <div class="label-qr-missing">No QR code yet</div>
+    <div class="label-qr-missing">No QR code yet.<br>Generate one below.</div>
   {% endif %}
 
   <p class="scan-instruction">Scan to update status</p>
@@ -96,6 +123,7 @@
     <li><span class="key">Location:</span> {{ unit.location_text|default:"—" }}</li>
   </ul>
 
+  {% if can_generate %}
   <div class="label-actions">
     <form method="post" action="{% url 'qr:generate' unit_code=unit.unit_code %}">
       {% csrf_token %}
@@ -104,5 +132,8 @@
       </button>
     </form>
   </div>
+  {% endif %}
+
+  <a class="label-back" href="{% url 'dashboard:index' %}">&larr; Back to dashboard</a>
 </div>
 {% endblock %}

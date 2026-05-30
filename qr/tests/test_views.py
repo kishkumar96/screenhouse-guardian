@@ -75,9 +75,28 @@ class LabelViewTest(TestCase):
         response = self.client.get(f'/qr/units/{self.unit.unit_code}/label/')
         self.assertContains(response, 'Scan to update status')
 
+    def test_label_contains_accession_code(self):
+        response = self.client.get(f'/qr/units/{self.unit.unit_code}/label/')
+        self.assertContains(response, self.unit.accession_code)
+
+    def test_label_contains_back_to_dashboard_link(self):
+        response = self.client.get(f'/qr/units/{self.unit.unit_code}/label/')
+        self.assertContains(response, '/dashboard/')
+
     def test_missing_unit_returns_404(self):
         response = self.client.get('/qr/units/UNIT-DOES-NOT-EXIST/label/')
         self.assertEqual(response.status_code, 404)
+
+    def test_generate_button_hidden_from_observer(self):
+        response = self.client.get(f'/qr/units/{self.unit.unit_code}/label/')
+        self.assertNotContains(response, 'Generate QR Code')
+        self.assertNotContains(response, 'Regenerate QR Code')
+
+    def test_generate_button_visible_to_manager(self):
+        manager = make_user('qr_label_mgr', 'Manager')
+        self.client.login(username='qr_label_mgr', password=_PASSWORD)
+        response = self.client.get(f'/qr/units/{self.unit.unit_code}/label/')
+        self.assertContains(response, 'Generate QR Code')
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())

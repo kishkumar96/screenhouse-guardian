@@ -3,7 +3,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from config.permissions import manager_required, observer_required
+from config.permissions import is_manager, manager_required, observer_required
 from inventory.models import TrackingUnit
 from .services import generate_qr_for_tracking_unit
 
@@ -15,7 +15,10 @@ def index(request):
 @observer_required
 def label(request, unit_code):
     unit = get_object_or_404(TrackingUnit, unit_code=unit_code)
-    return render(request, 'qr/label.html', {'unit': unit})
+    return render(request, 'qr/label.html', {
+        'unit': unit,
+        'can_generate': is_manager(request.user),
+    })
 
 
 @manager_required

@@ -51,16 +51,36 @@ Every user must belong to at least one role group before they can access the app
 
 ## 3. Create tracking units
 
-### Option A — Using the management command (quick demo setup)
+### Option A — Using the management command (recommended quick pilot setup)
 
 From the server terminal, inside the `screenhouse_guardian/` directory:
 
 ```bash
-python manage.py create_demo_tracking_units
+python manage.py create_phase1a_pilot_setup
 ```
 
-This creates four realistic demo units (Cassava, Taro, Banana, Kava) and prints
-what was created or skipped. Run it again safely — it will not duplicate records.
+This creates:
+
+- 10 realistic pilot tracking units
+- 1 Manager user: `pilot_manager`
+- 1 Observer user: `pilot_observer`
+
+Default password for both created users:
+
+```text
+pilotpass123
+```
+
+Run it again safely — it will not duplicate existing records.
+
+You can also override usernames and password:
+
+```bash
+python manage.py create_phase1a_pilot_setup \
+  --manager-username mgr_farm_01 \
+  --observer-username obs_farm_01 \
+  --password 'change-this-password'
+```
 
 ### Option B — Using the Django admin (recommended for real pilot units)
 

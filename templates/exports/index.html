@@ -34,6 +34,11 @@
   border-bottom: 1px solid #f0f0f0;
   padding-bottom: 0.5rem;
 }
+.export-desc {
+  font-size: 0.82rem;
+  color: #666;
+  margin: 0 0 0.75rem;
+}
 .export-links {
   display: flex;
   flex-wrap: wrap;
@@ -77,6 +82,7 @@
 
   <div class="export-group">
     <h3>Tracking Units</h3>
+    <p class="export-desc">One row per tracking unit — code, crop, quantity, location, QR status, active/archived.</p>
     <div class="export-links">
       <a class="csv" href="{% url 'exports:tracking_units_csv' %}">CSV</a>
       <a class="xlsx" href="{% url 'exports:tracking_units_excel' %}">Excel</a>
@@ -85,6 +91,7 @@
 
   <div class="export-group">
     <h3>Observations</h3>
+    <p class="export-desc">One row per observation — unit code, status, type, notes, affected quantity, observer, date.</p>
     <div class="export-links">
       <a class="csv" href="{% url 'exports:observations_csv' %}">CSV</a>
       <a class="xlsx" href="{% url 'exports:observations_excel' %}">Excel</a>
@@ -93,6 +100,7 @@
 
   <div class="export-group">
     <h3>Quantity Events</h3>
+    <p class="export-desc">One row per quantity change — unit code, event type, before/change/after values, reason, date.</p>
     <div class="export-links">
       <a class="csv" href="{% url 'exports:quantity_events_csv' %}">CSV</a>
       <a class="xlsx" href="{% url 'exports:quantity_events_excel' %}">Excel</a>
@@ -101,6 +109,7 @@
 
   <div class="export-group">
     <h3>Photo Metadata</h3>
+    <p class="export-desc">One row per uploaded photo — unit code, observation ID, filename, caption, upload date.</p>
     <div class="export-links">
       <a class="csv" href="{% url 'exports:photo_metadata_csv' %}">CSV</a>
       <a class="xlsx" href="{% url 'exports:photo_metadata_excel' %}">Excel</a>

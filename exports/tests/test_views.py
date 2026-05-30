@@ -80,6 +80,13 @@ def csv_headers(response):
 
 # ── Export index ──────────────────────────────────────────────────────────────
 
+def make_observer(username='exp_observer'):
+    user = User.objects.create_user(username=username, password=_PASSWORD)
+    group, _ = Group.objects.get_or_create(name='Observer')
+    user.groups.add(group)
+    return user
+
+
 class ExportIndexTest(TestCase):
 
     def setUp(self):
@@ -89,6 +96,12 @@ class ExportIndexTest(TestCase):
     def test_index_returns_200(self):
         response = self.client.get('/exports/')
         self.assertEqual(response.status_code, 200)
+
+    def test_index_returns_403_for_observer(self):
+        make_observer()
+        self.client.login(username='exp_observer', password=_PASSWORD)
+        response = self.client.get('/exports/')
+        self.assertEqual(response.status_code, 403)
 
     def test_index_contains_csv_links(self):
         response = self.client.get('/exports/')
@@ -109,6 +122,13 @@ class ExportIndexTest(TestCase):
             '/exports/photo-metadata.xlsx/',
         ]:
             self.assertContains(response, path)
+
+    def test_index_contains_export_descriptions(self):
+        response = self.client.get('/exports/')
+        self.assertContains(response, 'One row per tracking unit')
+        self.assertContains(response, 'One row per observation')
+        self.assertContains(response, 'One row per quantity change')
+        self.assertContains(response, 'One row per uploaded photo')
 
 
 # ── Tracking units CSV ────────────────────────────────────────────────────────
