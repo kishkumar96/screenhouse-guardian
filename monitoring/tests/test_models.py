@@ -218,6 +218,33 @@ class ObservationPhotoTest(TestCase):
         with self.assertRaises(ValidationError):
             photo.image.field.run_validators(photo.image)
 
+    def test_heic_extension_passes_extension_validator(self):
+        obs = self._make_observation()
+        heic_file = SimpleUploadedFile('photo.heic', b'fake heic content', content_type='image/heic')
+        photo = ObservationPhoto(observation=obs, image=heic_file)
+        # Extension validator alone must accept .heic
+        from django.core.validators import FileExtensionValidator
+        from monitoring.models import _ALLOWED_IMAGE_EXTENSIONS
+        validator = FileExtensionValidator(allowed_extensions=_ALLOWED_IMAGE_EXTENSIONS)
+        validator(photo.image)  # must not raise
+
+    def test_heif_extension_passes_extension_validator(self):
+        obs = self._make_observation()
+        heif_file = SimpleUploadedFile('photo.heif', b'fake heif content', content_type='image/heif')
+        photo = ObservationPhoto(observation=obs, image=heif_file)
+        from django.core.validators import FileExtensionValidator
+        from monitoring.models import _ALLOWED_IMAGE_EXTENSIONS
+        validator = FileExtensionValidator(allowed_extensions=_ALLOWED_IMAGE_EXTENSIONS)
+        validator(photo.image)  # must not raise
+
+    def test_heic_content_validator_skips_pillow(self):
+        obs = self._make_observation()
+        # Deliberately non-image bytes — validator must not raise for .heic
+        heic_file = SimpleUploadedFile('photo.heic', b'not a real image', content_type='image/heic')
+        photo = ObservationPhoto(observation=obs, image=heic_file)
+        from monitoring.models import validate_observation_image_content
+        validate_observation_image_content(photo.image)  # must not raise
+
 
 # ── ObservationPhoto — size and content validators ────────────────────────────
 

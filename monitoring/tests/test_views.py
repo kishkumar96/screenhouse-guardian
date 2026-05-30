@@ -116,6 +116,23 @@ class ObserveFormGetTest(TestCase):
         response = self.client.get(f'/observe/{self.unit.unit_code}/')
         self.assertContains(response, 'Sick')
 
+    def test_observe_includes_affected_quantity_helper_text(self):
+        response = self.client.get(f'/observe/{self.unit.unit_code}/')
+        self.assertContains(response, 'For containers, enter how many plants are affected')
+
+    def test_observe_includes_photo_helper_text(self):
+        response = self.client.get(f'/observe/{self.unit.unit_code}/')
+        self.assertContains(response, 'Max 5 MB')
+
+    def test_observe_photo_hint_uses_context_mb_value(self):
+        from monitoring.models import MAX_OBSERVATION_IMAGE_SIZE_MB
+        response = self.client.get(f'/observe/{self.unit.unit_code}/')
+        self.assertContains(response, f'Max {MAX_OBSERVATION_IMAGE_SIZE_MB} MB')
+
+    def test_observe_photo_hint_mentions_heic(self):
+        response = self.client.get(f'/observe/{self.unit.unit_code}/')
+        self.assertContains(response, 'HEIC')
+
 
 # ── Observe form — POST, no photo ─────────────────────────────────────────────
 
@@ -299,6 +316,10 @@ class TimelineViewTest(TestCase):
         unit = make_unit('TU-TL-LOC-001', location_text='SH1 / Bench Z')
         response = self.client.get(f'/observe/{unit.unit_code}/timeline/')
         self.assertContains(response, 'SH1 / Bench Z')
+
+    def test_timeline_heading_includes_crop_name(self):
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        self.assertContains(response, self.unit.crop_name)
 
 
 # ── Observe form — oversized photo rejection ──────────────────────────────────

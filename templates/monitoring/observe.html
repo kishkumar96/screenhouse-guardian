@@ -113,6 +113,11 @@
   margin-bottom: 1rem;
   font-size: 0.9rem;
 }
+.form-hint {
+  font-size: 0.8rem;
+  color: #777;
+  margin: 0.2rem 0 0;
+}
 {% endblock %}
 
 {% block content %}
@@ -205,6 +210,7 @@
     <div class="form-group">
       <label for="{{ photo_form.image.id_for_label }}">Image</label>
       {{ photo_form.image }}
+      <p class="form-hint">Optional. Max {{ max_photo_mb }} MB. JPG, PNG, WEBP, HEIC/HEIF accepted.</p>
       {% if photo_form.image.errors %}
       <ul class="errorlist">{% for e in photo_form.image.errors %}<li>{{ e }}</li>{% endfor %}</ul>
       {% endif %}
@@ -225,6 +231,9 @@
     <div class="form-group">
       <label for="{{ field.id_for_label }}">{{ field.label }}</label>
       {{ field }}
+      {% if field.html_name == 'affected_quantity' %}
+      <p class="form-hint">For containers, enter how many plants are affected. For individual plants, use 1.</p>
+      {% endif %}
       {% if field.errors %}
       <ul class="errorlist">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>
       {% endif %}

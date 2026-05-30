@@ -4,7 +4,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from config.permissions import observer_required
 from inventory.models import TrackingUnit
 from .forms import ObservationForm, ObservationPhotoForm
-from .models import Observation
+from .models import MAX_OBSERVATION_IMAGE_SIZE_MB, Observation
 
 
 @observer_required
@@ -56,6 +56,7 @@ def observe(request, unit_code):
         'form': form,
         'photo_form': photo_form,
         'latest_obs': latest_obs,
+        'max_photo_mb': MAX_OBSERVATION_IMAGE_SIZE_MB,
     })
 
 

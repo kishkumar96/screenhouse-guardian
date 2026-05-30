@@ -26,4 +26,4 @@ Successful
 The core Phase 1A workflow works end-to-end on phone.
 
 ## Notes
-Next pilot should test multiple tracking units, printed labels, weak internet, and multiple users.
+Next pilot should test multiple tracking units, printed labels, weak internet, large photos, and multiple users.

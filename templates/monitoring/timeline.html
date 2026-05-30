@@ -110,13 +110,12 @@
 
 {% block content %}
 <div class="tl-unit-banner">
-  <h2>{{ unit.unit_code }}</h2>
+  <h2>{{ unit.unit_code }} — {{ unit.crop_name }}</h2>
   <p class="tl-unit-meta">
-    {{ unit.crop_name }}
+    Qty {{ unit.quantity }}
+    {% if unit.location_text %} · {{ unit.location_text }}{% endif %}
     {% if unit.accession_code %} · {{ unit.accession_code }}{% endif %}
     {% if unit.batch_code %} · {{ unit.batch_code }}{% endif %}
-    · Qty {{ unit.quantity }}
-    {% if unit.location_text %} · {{ unit.location_text }}{% endif %}
   </p>
 </div>
 
