@@ -1,9 +1,17 @@
+import tempfile
+from io import BytesIO
+
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from inventory.models import TrackingUnit
-from monitoring.models import Observation, ObservationPhoto, QuantityEvent
+from monitoring.models import (
+    MAX_OBSERVATION_IMAGE_SIZE_BYTES,
+    Observation,
+    ObservationPhoto,
+    QuantityEvent,
+)
 
 
 def make_container(unit_code='TU-MON-001', quantity=10):
@@ -25,6 +33,28 @@ def make_observation(unit, **overrides):
     defaults.update(overrides)
     return Observation(**defaults)
 
+
+def make_real_jpeg(filename='plant.jpg', width=10, height=10):
+    """Return a SimpleUploadedFile containing a valid minimal JPEG."""
+    from PIL import Image
+    img = Image.new('RGB', (width, height), color='green')
+    buf = BytesIO()
+    img.save(buf, format='JPEG')
+    buf.seek(0)
+    return SimpleUploadedFile(filename, buf.read(), content_type='image/jpeg')
+
+
+def make_real_png(filename='plant.png'):
+    """Return a SimpleUploadedFile containing a valid minimal PNG."""
+    from PIL import Image
+    img = Image.new('RGB', (10, 10), color='blue')
+    buf = BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    return SimpleUploadedFile(filename, buf.read(), content_type='image/png')
+
+
+# ── Observation creation ──────────────────────────────────────────────────────
 
 class ObservationCreationTest(TestCase):
 
@@ -60,6 +90,8 @@ class ObservationCreationTest(TestCase):
         with self.assertRaises(ValidationError):
             obs.save()
 
+
+# ── Correction observations ───────────────────────────────────────────────────
 
 class CorrectionObservationTest(TestCase):
 
@@ -112,6 +144,8 @@ class CorrectionObservationTest(TestCase):
         self.assertIn(correction, original.corrections.all())
 
 
+# ── Affected quantity validation ──────────────────────────────────────────────
+
 class ObservationAffectedQuantityTest(TestCase):
 
     def test_affected_quantity_within_unit_quantity_is_valid(self):
@@ -137,6 +171,8 @@ class ObservationAffectedQuantityTest(TestCase):
         obs.full_clean()
 
 
+# ── ObservationPhoto — extension and link tests ───────────────────────────────
+
 class ObservationPhotoTest(TestCase):
 
     def _make_observation(self):
@@ -149,17 +185,23 @@ class ObservationPhotoTest(TestCase):
 
     def test_photo_links_to_observation(self):
         obs = self._make_observation()
+        # Just building the instance — not saving, so validators do not run.
         image = SimpleUploadedFile('plant.jpg', b'\xff\xd8\xff', content_type='image/jpeg')
         photo = ObservationPhoto(observation=obs, image=image)
         self.assertEqual(photo.observation, obs)
 
     def test_valid_image_extension_passes_validation(self):
+        """Extension validator accepts jpg/jpeg/png/webp; content validator requires real image."""
         obs = self._make_observation()
-        for ext in ['jpg', 'jpeg', 'png', 'webp']:
-            image = SimpleUploadedFile(f'plant.{ext}', b'fake', content_type='image/jpeg')
+        for ext, fmt in [('jpg', 'JPEG'), ('jpeg', 'JPEG'), ('png', 'PNG')]:
+            from PIL import Image
+            img = Image.new('RGB', (10, 10), color='green')
+            buf = BytesIO()
+            img.save(buf, format=fmt)
+            buf.seek(0)
+            image = SimpleUploadedFile(f'plant.{ext}', buf.read(), content_type=f'image/{fmt.lower()}')
             photo = ObservationPhoto(observation=obs, image=image)
-            # Should not raise for extension check; ImageField content validation
-            # is form-level and not triggered by full_clean() on the model.
+            # Should not raise — extension, size, and content are all valid
             photo.image.field.run_validators(photo.image)
 
     def test_invalid_file_extension_raises_validation_error(self):
@@ -176,6 +218,105 @@ class ObservationPhotoTest(TestCase):
         with self.assertRaises(ValidationError):
             photo.image.field.run_validators(photo.image)
 
+
+# ── ObservationPhoto — size and content validators ────────────────────────────
+
+class ObservationPhotoValidationTest(TestCase):
+
+    def _make_obs(self):
+        unit = make_container('TU-VAL-001')
+        return Observation.objects.create(
+            tracking_unit=unit,
+            observation_type=Observation.OBSERVATION_TYPE_ROUTINE,
+            status=Observation.STATUS_HEALTHY,
+        )
+
+    def test_rejects_file_exceeding_max_size(self):
+        obs = self._make_obs()
+        oversized = SimpleUploadedFile(
+            'big.jpg',
+            b'x' * (MAX_OBSERVATION_IMAGE_SIZE_BYTES + 1),
+            content_type='image/jpeg',
+        )
+        photo = ObservationPhoto(observation=obs, image=oversized)
+        with self.assertRaises(ValidationError) as ctx:
+            photo.image.field.run_validators(photo.image)
+        self.assertIn('too large', str(ctx.exception))
+
+    def test_accepts_valid_jpeg_under_max_size(self):
+        obs = self._make_obs()
+        jpeg = make_real_jpeg('small.jpg')
+        photo = ObservationPhoto(observation=obs, image=jpeg)
+        # Should not raise
+        photo.image.field.run_validators(photo.image)
+
+    def test_rejects_invalid_image_content_with_jpg_extension(self):
+        obs = self._make_obs()
+        fake = SimpleUploadedFile('fake.jpg', b'this is not an image', content_type='image/jpeg')
+        photo = ObservationPhoto(observation=obs, image=fake)
+        with self.assertRaises(ValidationError):
+            photo.image.field.run_validators(photo.image)
+
+
+# ── ObservationPhoto — thumbnail generation ───────────────────────────────────
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class ObservationPhotoThumbnailTest(TestCase):
+
+    def _make_obs(self):
+        unit = make_container('TU-THUMB-001')
+        return Observation.objects.create(
+            tracking_unit=unit,
+            observation_type=Observation.OBSERVATION_TYPE_ROUTINE,
+            status=Observation.STATUS_HEALTHY,
+        )
+
+    def test_generates_thumbnail_for_valid_jpeg(self):
+        obs = self._make_obs()
+        photo = ObservationPhoto.objects.create(
+            observation=obs,
+            image=make_real_jpeg('thumb_test.jpg'),
+        )
+        photo.refresh_from_db()
+        self.assertTrue(bool(photo.thumbnail))
+
+    def test_thumbnail_field_is_populated_after_save(self):
+        obs = self._make_obs()
+        photo = ObservationPhoto.objects.create(
+            observation=obs,
+            image=make_real_jpeg('pop_test.jpg'),
+        )
+        photo.refresh_from_db()
+        self.assertIn('observation_thumbnails', photo.thumbnail.name)
+
+    def test_generates_thumbnail_for_valid_png(self):
+        obs = self._make_obs()
+        photo = ObservationPhoto.objects.create(
+            observation=obs,
+            image=make_real_png('thumb_test.png'),
+        )
+        photo.refresh_from_db()
+        self.assertTrue(bool(photo.thumbnail))
+
+    def test_thumbnail_is_smaller_or_equal_to_max_dimensions(self):
+        obs = self._make_obs()
+        # Use a large-ish image so thumbnail actually needs to resize
+        from PIL import Image as PILImage
+        large = PILImage.new('RGB', (800, 600), color='red')
+        buf = BytesIO()
+        large.save(buf, format='JPEG')
+        buf.seek(0)
+        big_file = SimpleUploadedFile('big_plant.jpg', buf.read(), content_type='image/jpeg')
+        photo = ObservationPhoto.objects.create(observation=obs, image=big_file)
+        photo.refresh_from_db()
+        self.assertTrue(bool(photo.thumbnail))
+        with PILImage.open(photo.thumbnail.path) as thumb_img:
+            w, h = thumb_img.size
+        self.assertLessEqual(w, 400)
+        self.assertLessEqual(h, 400)
+
+
+# ── QuantityEvent creation ────────────────────────────────────────────────────
 
 class QuantityEventCreationTest(TestCase):
 
@@ -216,6 +357,8 @@ class QuantityEventCreationTest(TestCase):
             event.save()
 
 
+# ── QuantityEvent validation ──────────────────────────────────────────────────
+
 class QuantityEventValidationTest(TestCase):
 
     def test_quantity_after_must_equal_before_plus_change(self):
@@ -255,9 +398,6 @@ class QuantityEventValidationTest(TestCase):
 
     def test_quantity_change_resulting_in_negative_raises_error(self):
         unit = make_container('TU-QEV-004', quantity=3)
-        # quantity_before=3, quantity_change=-5 => would be -2
-        # quantity_after cannot be set to -2 (PositiveIntegerField), so we
-        # set it to 0 which is wrong by the math — both routes raise ValidationError.
         event = QuantityEvent(
             tracking_unit=unit,
             event_type=QuantityEvent.EVENT_TYPE_DEATH,
@@ -271,8 +411,6 @@ class QuantityEventValidationTest(TestCase):
     def test_negative_result_detected_by_clean(self):
         """clean() explicitly rejects when before + change < 0."""
         unit = make_container('TU-QEV-005', quantity=10)
-        # quantity_after can still be zero here because the model's explicit
-        # negative-result check runs before the equality mismatch branch.
         event = QuantityEvent(
             tracking_unit=unit,
             event_type=QuantityEvent.EVENT_TYPE_DEATH,

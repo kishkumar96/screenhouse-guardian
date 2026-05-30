@@ -78,12 +78,22 @@
   gap: 0.5rem;
   margin-top: 0.5rem;
 }
-.obs-card .obs-photos img {
+.obs-card .obs-photos a {
+  display: block;
+  line-height: 0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.obs-card .obs-photos a img {
   width: 80px;
   height: 80px;
   object-fit: cover;
   border-radius: 4px;
   border: 1px solid #ddd;
+  transition: opacity 0.15s;
+}
+.obs-card .obs-photos a:hover img {
+  opacity: 0.8;
 }
 .obs-card .corrects-ref {
   font-size: 0.8rem;
@@ -155,7 +165,11 @@
     {% if obs.photos.all %}
     <div class="obs-photos">
       {% for photo in obs.photos.all %}
-      <img src="{{ photo.image.url }}" alt="{{ photo.caption|default:'Observation photo' }}">
+      <a href="{{ photo.image.url }}" target="_blank" rel="noopener noreferrer"
+         title="{{ photo.caption|default:'View full image' }}">
+        <img src="{% if photo.thumbnail %}{{ photo.thumbnail.url }}{% else %}{{ photo.image.url }}{% endif %}"
+             alt="{{ photo.caption|default:'Observation photo' }}">
+      </a>
       {% endfor %}
     </div>
     {% endif %}

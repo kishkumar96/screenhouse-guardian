@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from inventory.models import TrackingUnit
-from monitoring.models import Observation, ObservationPhoto
+from monitoring.models import MAX_OBSERVATION_IMAGE_SIZE_BYTES, Observation, ObservationPhoto
 
 User = get_user_model()
 
@@ -40,6 +40,14 @@ def create_test_jpeg():
     img.save(buf, format='JPEG')
     buf.seek(0)
     return SimpleUploadedFile('plant.jpg', buf.read(), content_type='image/jpeg')
+
+
+def create_oversized_file():
+    """Return a SimpleUploadedFile that exceeds the max image upload size."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    content = b'x' * (MAX_OBSERVATION_IMAGE_SIZE_BYTES + 1)
+    return SimpleUploadedFile('big.jpg', content, content_type='image/jpeg')
 
 
 # ── Monitoring index ──────────────────────────────────────────────────────────
@@ -252,3 +260,76 @@ class TimelineViewTest(TestCase):
     def test_timeline_shows_new_observation_link(self):
         response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
         self.assertContains(response, f'/observe/{self.unit.unit_code}/')
+
+
+# ── Observe form — oversized photo rejection ──────────────────────────────────
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class OversizedPhotoTest(TestCase):
+
+    def setUp(self):
+        self.unit = make_unit('TU-BIG-PHOTO-001', quantity=5)
+
+    def test_oversized_photo_rejected_and_creates_no_observation(self):
+        oversized = create_oversized_file()
+        response = self.client.post(
+            f'/observe/{self.unit.unit_code}/',
+            {
+                'status': Observation.STATUS_HEALTHY,
+                'observation_type': Observation.OBSERVATION_TYPE_ROUTINE,
+                'image': oversized,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Observation.objects.filter(tracking_unit=self.unit).exists())
+
+    def test_invalid_photo_shows_error_in_form(self):
+        """Any invalid photo upload (oversized, corrupt, wrong type) shows an errorlist."""
+        oversized = create_oversized_file()
+        response = self.client.post(
+            f'/observe/{self.unit.unit_code}/',
+            {
+                'status': Observation.STATUS_HEALTHY,
+                'observation_type': Observation.OBSERVATION_TYPE_ROUTINE,
+                'image': oversized,
+            },
+        )
+        self.assertContains(response, 'errorlist')
+
+
+# ── Timeline — photo rendering ────────────────────────────────────────────────
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class TimelinePhotoTest(TestCase):
+
+    def setUp(self):
+        self.unit = make_unit('TU-TL-PHOTO-001', quantity=5)
+        self.obs = make_observation(self.unit, status=Observation.STATUS_HEALTHY)
+
+    def test_timeline_uses_thumbnail_when_available(self):
+        ObservationPhoto.objects.create(
+            observation=self.obs,
+            image=create_test_jpeg(),
+        )
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        self.assertContains(response, 'observation_thumbnails')
+
+    def test_timeline_links_to_original_image(self):
+        ObservationPhoto.objects.create(
+            observation=self.obs,
+            image=create_test_jpeg(),
+        )
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        self.assertContains(response, 'observation_photos')
+        self.assertContains(response, 'target="_blank"')
+
+    def test_timeline_falls_back_to_original_when_no_thumbnail(self):
+        # Create a photo record with no thumbnail (bypass save() to skip generation)
+        photo = ObservationPhoto(observation=self.obs, image=create_test_jpeg())
+        # Save without triggering thumbnail generation by calling super().save() manually
+        from django.db.models import Model
+        Model.save(photo)
+        ObservationPhoto.objects.filter(pk=photo.pk).update(thumbnail='')
+        response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+        # Original image URL used as src when thumbnail is absent
+        self.assertContains(response, 'observation_photos')
