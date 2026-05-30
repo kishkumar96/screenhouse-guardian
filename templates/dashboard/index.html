@@ -205,6 +205,45 @@
 }
 .followup-table tr:last-child td { border-bottom: none; }
 .overdue-date { color: #c62828; font-weight: 700; }
+.rounds-section { margin-bottom: 1.75rem; }
+.rounds-today-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  margin-top: 0.75rem;
+}
+.rounds-today-table th {
+  background: #e3f2fd;
+  color: #1565c0;
+  text-align: left;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #ddd;
+}
+.rounds-today-table td {
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+.rounds-today-table tr:last-child td { border-bottom: none; }
+.round-status-sm {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.1rem 0.4rem;
+  border-radius: 8px;
+}
+.status-planned     { background: #e3f2fd; color: #1565c0; }
+.status-in_progress { background: #fff8e1; color: #f57f17; }
+.status-completed   { background: #c8e6c9; color: #1b5e20; }
+.status-missed      { background: #ffcdd2; color: #b71c1c; }
+.status-cancelled   { background: #eeeeee; color: #555; }
 {% endblock %}
 
 {% block content %}
@@ -215,6 +254,7 @@
     {% if show_manager_links %}
       <a href="{% url 'exports:index' %}" class="dash-action-btn">Export data</a>
     {% endif %}
+    <a href="{% url 'monitoring:round_list' %}" class="dash-action-btn secondary">Daily rounds</a>
     <a href="{% url 'inventory:archived_tracking_units' %}" class="dash-action-btn secondary">Archived units</a>
     {% if show_staff_links %}
       <a href="/admin/inventory/trackingunit/add/" class="dash-action-btn secondary">Create unit in admin</a>
@@ -257,7 +297,47 @@
     <div class="summary-label">Overdue Follow-ups</div>
   </div>
   {% endif %}
+  <div class="summary-card neutral">
+    <div class="summary-value">{{ rounds_today_count }}</div>
+    <div class="summary-label">Rounds Today</div>
+  </div>
+  <div class="summary-card">
+    <div class="summary-value">{{ round_items_completed_today }}</div>
+    <div class="summary-label">Items Done Today</div>
+  </div>
+  <div class="summary-card {% if round_items_pending_today > 0 %}warn{% endif %}">
+    <div class="summary-value">{{ round_items_pending_today }}</div>
+    <div class="summary-label">Items Pending Today</div>
+  </div>
 </div>
+
+{% if rounds_today_list %}
+<div class="rounds-section">
+  <h3 class="section-heading">Today's Rounds</h3>
+  <table class="rounds-today-table">
+    <thead>
+      <tr>
+        <th>Round</th>
+        <th>Status</th>
+        <th>Assigned</th>
+        <th>Progress</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rounds_today_list %}
+      <tr>
+        <td><strong>{{ r.name }}</strong></td>
+        <td><span class="round-status-sm status-{{ r.status }}">{{ r.get_status_display }}</span></td>
+        <td>{% if r.assigned_to %}{{ r.assigned_to.get_full_name|default:r.assigned_to.username }}{% else %}—{% endif %}</td>
+        <td>{{ r.completed_items }}/{{ r.total_items }}</td>
+        <td><a href="{% url 'monitoring:round_detail' round_id=r.pk %}" style="font-size:0.78rem;color:#1565c0;">View</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 
 {% if show_manager_links and overdue_followup_list %}
 <div class="followup-section">

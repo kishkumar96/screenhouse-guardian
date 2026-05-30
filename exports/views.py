@@ -2,6 +2,10 @@ from django.shortcuts import render
 
 from config.permissions import manager_required
 from .services import (
+    export_daily_round_items_csv_response,
+    export_daily_round_items_excel_response,
+    export_daily_rounds_csv_response,
+    export_daily_rounds_excel_response,
     export_observations_csv_response,
     export_observations_excel_response,
     export_photo_metadata_csv_response,
@@ -68,3 +72,23 @@ def treatments_csv(request):
 @manager_required
 def treatments_excel(request):
     return export_treatments_excel_response()
+
+
+@manager_required
+def daily_rounds_csv(request):
+    return export_daily_rounds_csv_response()
+
+
+@manager_required
+def daily_rounds_excel(request):
+    return export_daily_rounds_excel_response()
+
+
+@manager_required
+def daily_round_items_csv(request):
+    return export_daily_round_items_csv_response()
+
+
+@manager_required
+def daily_round_items_excel(request):
+    return export_daily_round_items_excel_response()

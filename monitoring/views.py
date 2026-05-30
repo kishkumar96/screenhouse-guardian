@@ -1,12 +1,27 @@
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.db.models import OuterRef, Subquery
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 
 from config.permissions import is_manager, manager_required, observer_required
 from inventory.models import TrackingUnit
-from .forms import ObservationForm, ObservationPhotoForm, QuantityEventForm, TreatmentForm, TreatmentOutcomeForm
-from .models import MAX_OBSERVATION_IMAGE_SIZE_MB, Observation, Treatment
-from .services import apply_quantity_event
+from .forms import (
+    DailyRoundCreateForm,
+    DailyRoundEditForm,
+    ObservationForm,
+    ObservationPhotoForm,
+    QuantityEventForm,
+    TreatmentForm,
+    TreatmentOutcomeForm,
+)
+from .models import DailyRound, DailyRoundItem, MAX_OBSERVATION_IMAGE_SIZE_MB, Observation, Treatment
+from .services import (
+    apply_quantity_event,
+    create_daily_round_with_items,
+    mark_overdue_rounds_missed,
+    update_daily_round_status,
+)
 
 
 def _get_unit_with_related(unit_code):
@@ -72,6 +87,19 @@ def observe(request, unit_code):
             'archived': True,
         })
 
+    # Resolve optional round_item link from QR or round detail page.
+    round_item_id = request.GET.get('round_item') or request.POST.get('round_item')
+    round_item = None
+    if round_item_id:
+        try:
+            round_item = DailyRoundItem.objects.select_related('daily_round').get(
+                pk=int(round_item_id),
+                tracking_unit=unit,
+            )
+        except (DailyRoundItem.DoesNotExist, ValueError, TypeError):
+            from django.http import Http404
+            raise Http404('Round item not found or does not belong to this unit.')
+
     if request.method == 'POST':
         form = ObservationForm(request.POST, tracking_unit=unit)
         has_photo = bool(request.FILES.get('image'))
@@ -95,6 +123,16 @@ def observe(request, unit_code):
                 photo.observation = obs
                 photo.save()
 
+            # Link to round item if present.
+            if round_item is not None:
+                round_item.observation = obs
+                round_item.completed = True
+                round_item.completed_at = timezone.now()
+                round_item.save(update_fields=['observation', 'completed', 'completed_at'])
+                update_daily_round_status(round_item.daily_round)
+                messages.success(request, 'Observation saved and round item marked complete.')
+                return redirect('monitoring:round_detail', round_id=round_item.daily_round_id)
+
             messages.success(request, 'Observation saved successfully.')
             return redirect('observe_timeline', unit_code=unit_code)
     else:
@@ -113,6 +151,7 @@ def observe(request, unit_code):
         'photo_form': photo_form,
         'latest_obs': latest_obs,
         'max_photo_mb': MAX_OBSERVATION_IMAGE_SIZE_MB,
+        'round_item': round_item,
     })
 
 
@@ -122,7 +161,7 @@ def timeline(request, unit_code):
     observations = (
         unit.observations
         .select_related('created_by', 'corrects_observation')
-        .prefetch_related('photos')
+        .prefetch_related('photos', 'round_items__daily_round')
         .order_by('-created_at')
     )
     quantity_events = (
@@ -234,5 +273,103 @@ def update_treatment_outcome(request, treatment_id):
     return render(request, 'monitoring/treatment_outcome_form.html', {
         'treatment': treatment,
         'unit': unit,
+        'form': form,
+    })
+
+
+# ── Daily round views ──────────────────────────────────────────────────────────
+
+@observer_required
+def round_list(request):
+    mark_overdue_rounds_missed()
+    rounds = (
+        DailyRound.objects
+        .select_related('assigned_to', 'created_by')
+        .prefetch_related('items')
+        .order_by('-date', '-created_at')
+    )
+    return render(request, 'monitoring/round_list.html', {
+        'rounds': rounds,
+        'show_manager_links': is_manager(request.user),
+    })
+
+
+@manager_required
+def round_create(request):
+    if request.method == 'POST':
+        form = DailyRoundCreateForm(request.POST)
+        if form.is_valid():
+            try:
+                daily_round = create_daily_round_with_items(
+                    name=form.cleaned_data['name'],
+                    date=form.cleaned_data['date'],
+                    generation_mode=form.cleaned_data['generation_mode'],
+                    location_filter=form.cleaned_data.get('location_filter', ''),
+                    assigned_to=form.cleaned_data.get('assigned_to'),
+                    notes=form.cleaned_data.get('notes', ''),
+                    created_by=request.user,
+                )
+                item_count = daily_round.items.count()
+                messages.success(
+                    request,
+                    f'Round created with {item_count} unit{"s" if item_count != 1 else ""}.',
+                )
+                return redirect('monitoring:round_detail', round_id=daily_round.pk)
+            except ValidationError as exc:
+                form.add_error(None, exc.message)
+    else:
+        form = DailyRoundCreateForm()
+
+    return render(request, 'monitoring/round_form.html', {'form': form})
+
+
+@observer_required
+def round_detail(request, round_id):
+    mark_overdue_rounds_missed()
+    daily_round = get_object_or_404(
+        DailyRound.objects.select_related('assigned_to', 'created_by'),
+        pk=round_id,
+    )
+
+    _latest_obs_qs = Observation.objects.filter(
+        tracking_unit=OuterRef('tracking_unit_id')
+    ).order_by('-created_at')
+
+    items = (
+        daily_round.items
+        .select_related(
+            'tracking_unit__crop',
+            'tracking_unit__accession',
+            'tracking_unit__batch',
+            'tracking_unit__position__bench__screen_house__site',
+            'observation__created_by',
+        )
+        .annotate(
+            latest_obs_status=Subquery(_latest_obs_qs.values('status')[:1]),
+            latest_obs_at=Subquery(_latest_obs_qs.values('created_at')[:1]),
+        )
+        .order_by('tracking_unit__unit_code')
+    )
+
+    return render(request, 'monitoring/round_detail.html', {
+        'daily_round': daily_round,
+        'items': items,
+        'show_manager_links': is_manager(request.user),
+    })
+
+
+@manager_required
+def round_edit(request, round_id):
+    daily_round = get_object_or_404(DailyRound, pk=round_id)
+    if request.method == 'POST':
+        form = DailyRoundEditForm(request.POST, instance=daily_round)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Round updated.')
+            return redirect('monitoring:round_detail', round_id=daily_round.pk)
+    else:
+        form = DailyRoundEditForm(instance=daily_round)
+    return render(request, 'monitoring/round_edit.html', {
+        'daily_round': daily_round,
         'form': form,
     })

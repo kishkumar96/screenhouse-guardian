@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}{{ daily_round.name }} — Daily Round{% endblock %}
+
+{% block extra_style %}
+.round-banner {
+  background: #e8f5e9;
+  border-left: 4px solid #2e7d32;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  border-radius: 0 4px 4px 0;
+}
+.round-banner h2 { margin: 0 0 0.2rem; font-size: 1.2rem; }
+.round-meta { font-size: 0.85rem; color: #555; margin: 0.15rem 0 0; }
+.round-status {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-left: 0.5rem;
+}
+.status-planned     { background: #e3f2fd; color: #1565c0; }
+.status-in_progress { background: #fff8e1; color: #f57f17; }
+.status-completed   { background: #c8e6c9; color: #1b5e20; }
+.status-missed      { background: #ffcdd2; color: #b71c1c; }
+.status-cancelled   { background: #eeeeee; color: #555; }
+.progress-summary {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 0.85rem 1.1rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+}
+.progress-summary .prog-stat { text-align: center; }
+.progress-summary .prog-value { font-size: 1.5rem; font-weight: 700; color: #2e7d32; display: block; }
+.progress-summary .prog-label { font-size: 0.72rem; text-transform: uppercase; color: #666; letter-spacing: 0.04em; }
+.round-actions { margin-bottom: 1rem; }
+.round-actions a, .round-actions span {
+  display: inline-block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.45rem 1rem;
+  border-radius: 4px;
+  text-decoration: none;
+  margin-right: 0.4rem;
+}
+.round-actions a.primary { background: #2e7d32; color: #fff; }
+.round-actions a.primary:hover { background: #1b5e20; }
+.round-actions a.secondary { background: #fff; color: #2e7d32; border: 1px solid #2e7d32; }
+.round-actions a.secondary:hover { background: #f1f8e9; }
+.checklist-table-wrap { overflow-x: auto; }
+.checklist-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+.checklist-table th {
+  background: #f1f8e9;
+  color: #2e7d32;
+  text-align: left;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #ddd;
+  white-space: nowrap;
+}
+.checklist-table td {
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+.checklist-table tr:last-child td { border-bottom: none; }
+.checklist-table tr.item-done td { background: #f9fbe7; }
+.unit-code { font-family: monospace; font-size: 0.85rem; font-weight: 600; }
+.obs-status {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.status-healthy   { background: #c8e6c9; color: #1b5e20; }
+.status-watch     { background: #fff9c4; color: #f57f17; }
+.status-sick      { background: #ffe0b2; color: #e65100; }
+.status-critical  { background: #ffcdd2; color: #b71c1c; }
+.status-dead      { background: #eeeeee; color: #424242; }
+.status-recovered { background: #e1bee7; color: #4a148c; }
+.check-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+}
+.check-done { background: #c8e6c9; color: #1b5e20; }
+.check-pending { background: #fff9c4; color: #f57f17; }
+.action-links a {
+  font-size: 0.78rem;
+  color: #2e7d32;
+  text-decoration: none;
+  border: 1px solid #a5d6a7;
+  border-radius: 3px;
+  padding: 0.15rem 0.45rem;
+  margin-right: 0.25rem;
+  white-space: nowrap;
+}
+.action-links a:hover { background: #e8f5e9; }
+.action-links a.observe-link {
+  background: #2e7d32;
+  color: #fff;
+  border-color: #2e7d32;
+}
+.action-links a.observe-link:hover { background: #1b5e20; }
+.round-note {
+  font-size: 0.8rem;
+  color: #777;
+  margin-top: 0.2rem;
+}
+.empty-state { text-align: center; padding: 2rem; color: #888; font-size: 0.9rem; }
+{% endblock %}
+
+{% block content %}
+<div class="round-banner">
+  <h2>
+    {{ daily_round.name }}
+    <span class="round-status status-{{ daily_round.status }}">{{ daily_round.get_status_display }}</span>
+  </h2>
+  <p class="round-meta">
+    {{ daily_round.date|date:"d M Y" }}
+    {% if daily_round.assigned_to %} · Assigned to {{ daily_round.assigned_to.get_full_name|default:daily_round.assigned_to.username }}{% endif %}
+    {% if daily_round.notes %} · {{ daily_round.notes }}{% endif %}
+  </p>
+</div>
+
+<div class="progress-summary">
+  <div class="prog-stat">
+    <span class="prog-value">{{ daily_round.total_items }}</span>
+    <span class="prog-label">Total</span>
+  </div>
+  <div class="prog-stat">
+    <span class="prog-value" style="color:#2e7d32;">{{ daily_round.completed_items }}</span>
+    <span class="prog-label">Completed</span>
+  </div>
+  <div class="prog-stat">
+    <span class="prog-value" style="color:#f57f17;">{{ daily_round.pending_items }}</span>
+    <span class="prog-label">Pending</span>
+  </div>
+</div>
+
+<div class="round-actions">
+  <a href="{% url 'monitoring:round_list' %}" class="secondary">&larr; All rounds</a>
+  {% if show_manager_links %}
+  <a href="{% url 'monitoring:round_edit' round_id=daily_round.pk %}" class="secondary">Edit round</a>
+  {% endif %}
+  <a href="{% url 'dashboard:index' %}" class="secondary">Dashboard</a>
+</div>
+
+<div class="checklist-table-wrap">
+  <table class="checklist-table">
+    <thead>
+      <tr>
+        <th>Unit</th>
+        <th>Crop</th>
+        <th>Qty</th>
+        <th>Location</th>
+        <th>Last status</th>
+        <th>Last checked</th>
+        <th>Done</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr class="{% if item.completed %}item-done{% endif %}">
+        <td class="unit-code">{{ item.tracking_unit.unit_code }}</td>
+        <td>{{ item.tracking_unit.display_crop }}</td>
+        <td>{{ item.tracking_unit.quantity }}</td>
+        <td>{{ item.tracking_unit.display_location|default:"—" }}</td>
+        <td>
+          {% if item.latest_obs_status %}
+          <span class="obs-status status-{{ item.latest_obs_status }}">{{ item.latest_obs_status|capfirst }}</span>
+          {% else %}
+          <span style="color:#aaa;font-size:0.78rem;">Not checked</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if item.latest_obs_at %}
+          {{ item.latest_obs_at|date:"d M Y" }}
+          {% else %}
+          &mdash;
+          {% endif %}
+        </td>
+        <td>
+          {% if item.completed %}
+          <span class="check-badge check-done">Done</span>
+          {% if item.completed_at %}
+          <p class="round-note">{{ item.completed_at|date:"H:i" }}</p>
+          {% endif %}
+          {% if item.observation %}
+          <p class="round-note"><a href="{% url 'observe_timeline' unit_code=item.tracking_unit.unit_code %}">View obs</a></p>
+          {% endif %}
+          {% else %}
+          <span class="check-badge check-pending">Pending</span>
+          {% endif %}
+        </td>
+        <td class="action-links">
+          {% if not item.completed and item.tracking_unit.is_active %}
+          <a class="observe-link" href="{% url 'observe' unit_code=item.tracking_unit.unit_code %}?round_item={{ item.pk }}">Observe</a>
+          {% endif %}
+          <a href="{% url 'observe_timeline' unit_code=item.tracking_unit.unit_code %}">Timeline</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="8" class="empty-state">No items in this round.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

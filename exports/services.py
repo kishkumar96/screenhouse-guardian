@@ -6,7 +6,7 @@ from django.http import HttpResponse
 from django.utils.timezone import is_aware, make_naive
 
 from inventory.models import TrackingUnit
-from monitoring.models import Observation, ObservationPhoto, QuantityEvent, Treatment
+from monitoring.models import DailyRound, DailyRoundItem, Observation, ObservationPhoto, QuantityEvent, Treatment
 
 
 def _naive(dt):
@@ -322,3 +322,117 @@ def _excel_response(workbook, filename):
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     workbook.save(response)
     return response
+
+
+# ── Daily rounds ──────────────────────────────────────────────────────────────
+
+_DAILY_ROUND_HEADERS = [
+    'id', 'name', 'date', 'status', 'assigned_to', 'location_filter',
+    'total_items', 'completed_items', 'created_by', 'created_at', 'updated_at',
+]
+
+
+def _daily_round_row(r):
+    return [
+        r.pk,
+        r.name,
+        r.date,
+        r.status,
+        r.assigned_to.username if r.assigned_to else '',
+        r.location_filter,
+        r.items.count(),
+        r.items.filter(completed=True).count(),
+        r.created_by.username if r.created_by else '',
+        r.created_at,
+        r.updated_at,
+    ]
+
+
+def _daily_rounds_queryset():
+    return (
+        DailyRound.objects
+        .select_related('assigned_to', 'created_by')
+        .prefetch_related('items')
+        .order_by('-date', '-created_at')
+    )
+
+
+def export_daily_rounds_csv_response():
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="daily_rounds.csv"'
+    writer = csv.writer(response)
+    writer.writerow(_DAILY_ROUND_HEADERS)
+    for r in _daily_rounds_queryset():
+        writer.writerow(_daily_round_row(r))
+    return response
+
+
+def export_daily_rounds_excel_response():
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Daily Rounds'
+    ws.append(_DAILY_ROUND_HEADERS)
+    for r in _daily_rounds_queryset():
+        ws.append(_excel_row(_daily_round_row(r)))
+    return _excel_response(wb, 'daily_rounds.xlsx')
+
+
+# ── Daily round items ─────────────────────────────────────────────────────────
+
+_DAILY_ROUND_ITEM_HEADERS = [
+    'round_id', 'round_name', 'date',
+    'tracking_unit_code', 'crop', 'accession', 'quantity', 'location',
+    'completed', 'completed_at', 'observation_id', 'notes',
+]
+
+
+def _daily_round_item_row(item):
+    unit = item.tracking_unit
+    return [
+        item.daily_round_id,
+        item.daily_round.name,
+        item.daily_round.date,
+        unit.unit_code,
+        unit.display_crop,
+        unit.display_accession,
+        unit.quantity,
+        unit.display_location,
+        item.completed,
+        item.completed_at,
+        item.observation_id or '',
+        item.notes,
+    ]
+
+
+def _daily_round_items_queryset():
+    return (
+        DailyRoundItem.objects
+        .select_related(
+            'daily_round',
+            'tracking_unit__crop',
+            'tracking_unit__accession',
+            'tracking_unit__batch',
+            'tracking_unit__position__bench__screen_house__site',
+        )
+        .order_by('daily_round__date', 'daily_round__name', 'tracking_unit__unit_code')
+    )
+
+
+def export_daily_round_items_csv_response():
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="daily_round_items.csv"'
+    writer = csv.writer(response)
+    writer.writerow(_DAILY_ROUND_ITEM_HEADERS)
+    for item in _daily_round_items_queryset():
+        writer.writerow(_daily_round_item_row(item))
+    return response
+
+
+def export_daily_round_items_excel_response():
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Round Items'
+    ws.append(_DAILY_ROUND_ITEM_HEADERS)
+    for item in _daily_round_items_queryset():
+        ws.append(_excel_row(_daily_round_item_row(item)))
+    return _excel_response(wb, 'daily_round_items.xlsx')

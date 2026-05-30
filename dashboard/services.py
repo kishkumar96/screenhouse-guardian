@@ -4,7 +4,7 @@ from django.db.models import Prefetch
 from django.utils import timezone
 
 from inventory.models import TrackingUnit
-from monitoring.models import Observation, Treatment
+from monitoring.models import DailyRound, DailyRoundItem, Observation, Treatment
 
 
 def get_latest_observation_for_unit(unit):
@@ -83,6 +83,16 @@ def get_dashboard_data():
         .order_by('follow_up_date')[:5]
     )
 
+    # Daily round summary for today
+    rounds_today = DailyRound.objects.filter(date=today).order_by('name')
+    round_items_today = DailyRoundItem.objects.filter(daily_round__date=today)
+    rounds_today_count = rounds_today.count()
+    round_items_completed_today = round_items_today.filter(completed=True).count()
+    round_items_pending_today = round_items_today.filter(completed=False).count()
+    rounds_today_list = list(
+        rounds_today.select_related('assigned_to').prefetch_related('items')[:5]
+    )
+
     return {
         'units': units,
         'total_units': total_units,
@@ -94,4 +104,8 @@ def get_dashboard_data():
         'pending_followups': pending_followups,
         'overdue_followups': overdue_followups,
         'overdue_followup_list': overdue_followup_list,
+        'rounds_today_count': rounds_today_count,
+        'round_items_completed_today': round_items_completed_today,
+        'round_items_pending_today': round_items_pending_today,
+        'rounds_today_list': rounds_today_list,
     }

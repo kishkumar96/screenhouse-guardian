@@ -517,3 +517,65 @@ class TreatmentCreationTest(TestCase):
         )
         self.assertIn(self.unit.unit_code, str(tx))
         self.assertIn('Watered', str(tx))
+
+
+# ── DailyRound model ──────────────────────────────────────────────────────────
+
+class DailyRoundCreationTest(TestCase):
+
+    def test_can_create_daily_round(self):
+        from monitoring.models import DailyRound
+        import datetime
+        dr = DailyRound.objects.create(name='Morning round', date=datetime.date.today())
+        self.assertIsNotNone(dr.pk)
+
+    def test_default_status_is_planned(self):
+        from monitoring.models import DailyRound
+        import datetime
+        dr = DailyRound.objects.create(name='Test round', date=datetime.date.today())
+        self.assertEqual(dr.status, DailyRound.STATUS_PLANNED)
+
+    def test_str_includes_name_and_date(self):
+        from monitoring.models import DailyRound
+        import datetime
+        today = datetime.date.today()
+        dr = DailyRound.objects.create(name='Bay 3 round', date=today)
+        self.assertIn('Bay 3 round', str(dr))
+        self.assertIn(str(today), str(dr))
+
+
+class DailyRoundItemCreationTest(TestCase):
+
+    def setUp(self):
+        from monitoring.models import DailyRound
+        import datetime
+        self.unit = make_container('TU-DR-001')
+        self.dr = DailyRound.objects.create(name='Test round', date=datetime.date.today())
+
+    def test_can_create_round_item(self):
+        from monitoring.models import DailyRoundItem
+        item = DailyRoundItem.objects.create(daily_round=self.dr, tracking_unit=self.unit)
+        self.assertIsNotNone(item.pk)
+        self.assertFalse(item.completed)
+
+    def test_unique_constraint_prevents_duplicate_unit_in_same_round(self):
+        from monitoring.models import DailyRoundItem
+        from django.db import IntegrityError
+        DailyRoundItem.objects.create(daily_round=self.dr, tracking_unit=self.unit)
+        with self.assertRaises(IntegrityError):
+            DailyRoundItem.objects.create(daily_round=self.dr, tracking_unit=self.unit)
+
+    def test_round_item_can_link_to_observation(self):
+        from monitoring.models import DailyRoundItem
+        obs = Observation.objects.create(
+            tracking_unit=self.unit,
+            observation_type=Observation.OBSERVATION_TYPE_ROUTINE,
+            status=Observation.STATUS_HEALTHY,
+        )
+        item = DailyRoundItem.objects.create(
+            daily_round=self.dr,
+            tracking_unit=self.unit,
+            observation=obs,
+            completed=True,
+        )
+        self.assertEqual(item.observation, obs)

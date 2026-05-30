@@ -401,3 +401,99 @@ class Treatment(models.Model):
             f'{self.get_treatment_type_display()} '
             f'({self.treatment_date.strftime("%Y-%m-%d")})'
         )
+
+
+# ── DailyRound ─────────────────────────────────────────────────────────────────
+
+class DailyRound(models.Model):
+
+    STATUS_PLANNED = 'planned'
+    STATUS_IN_PROGRESS = 'in_progress'
+    STATUS_COMPLETED = 'completed'
+    STATUS_MISSED = 'missed'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_PLANNED, 'Planned'),
+        (STATUS_IN_PROGRESS, 'In Progress'),
+        (STATUS_COMPLETED, 'Completed'),
+        (STATUS_MISSED, 'Missed'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    ]
+
+    name = models.CharField(max_length=200)
+    date = models.DateField()
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_daily_rounds',
+    )
+    location_filter = models.CharField(max_length=200, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PLANNED,
+    )
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_daily_rounds',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date', '-created_at']
+
+    def __str__(self):
+        return f'{self.name} ({self.date})'
+
+    @property
+    def total_items(self):
+        return self.items.count()
+
+    @property
+    def completed_items(self):
+        return self.items.filter(completed=True).count()
+
+    @property
+    def pending_items(self):
+        return self.items.filter(completed=False).count()
+
+
+# ── DailyRoundItem ─────────────────────────────────────────────────────────────
+
+class DailyRoundItem(models.Model):
+
+    daily_round = models.ForeignKey(
+        DailyRound,
+        on_delete=models.CASCADE,
+        related_name='items',
+    )
+    tracking_unit = models.ForeignKey(
+        TrackingUnit,
+        on_delete=models.CASCADE,
+        related_name='round_items',
+    )
+    observation = models.ForeignKey(
+        Observation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='round_items',
+    )
+    completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['tracking_unit__unit_code']
+        unique_together = [('daily_round', 'tracking_unit')]
+
+    def __str__(self):
+        status = 'done' if self.completed else 'pending'
+        return f'{self.daily_round} — {self.tracking_unit.unit_code} [{status}]'

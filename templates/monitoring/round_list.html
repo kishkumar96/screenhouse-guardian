@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Daily Rounds — Screen House Guardian{% endblock %}
+
+{% block extra_style %}
+.round-heading {
+  margin-bottom: 1.25rem;
+}
+.round-heading h2 { margin: 0 0 0.25rem; font-size: 1.4rem; }
+.round-heading p { margin: 0; color: #666; font-size: 0.9rem; }
+.round-actions {
+  margin-top: 0.6rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.dash-action-btn {
+  display: inline-block;
+  background: #2e7d32;
+  color: #fff;
+  padding: 0.45rem 1rem;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.dash-action-btn:hover { background: #1b5e20; }
+.dash-action-btn.secondary {
+  background: #fff;
+  color: #2e7d32;
+  border: 1px solid #2e7d32;
+}
+.dash-action-btn.secondary:hover { background: #f1f8e9; }
+.rounds-table-wrap { overflow-x: auto; }
+.rounds-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+.rounds-table th {
+  background: #f1f8e9;
+  color: #2e7d32;
+  text-align: left;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border-bottom: 1px solid #ddd;
+}
+.rounds-table td {
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+.rounds-table tr:last-child td { border-bottom: none; }
+.rounds-table tr:hover td { background: #fafafa; }
+.round-status {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.status-planned     { background: #e3f2fd; color: #1565c0; }
+.status-in_progress { background: #fff8e1; color: #f57f17; }
+.status-completed   { background: #c8e6c9; color: #1b5e20; }
+.status-missed      { background: #ffcdd2; color: #b71c1c; }
+.status-cancelled   { background: #eeeeee; color: #555; }
+.progress-bar-wrap {
+  background: #eee;
+  border-radius: 4px;
+  height: 8px;
+  width: 80px;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 0.4rem;
+}
+.progress-bar-fill {
+  background: #2e7d32;
+  border-radius: 4px;
+  height: 8px;
+}
+.action-links a {
+  font-size: 0.78rem;
+  color: #2e7d32;
+  text-decoration: none;
+  border: 1px solid #a5d6a7;
+  border-radius: 3px;
+  padding: 0.15rem 0.45rem;
+  margin-right: 0.25rem;
+  white-space: nowrap;
+}
+.action-links a:hover { background: #e8f5e9; }
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: #888;
+  font-size: 0.9rem;
+}
+{% endblock %}
+
+{% block content %}
+<div class="round-heading">
+  <h2>Daily Rounds</h2>
+  <p>Inspection rounds and checklists for active tracking units.</p>
+  <div class="round-actions">
+    {% if show_manager_links %}
+    <a href="{% url 'monitoring:round_create' %}" class="dash-action-btn">+ New round</a>
+    {% endif %}
+    <a href="{% url 'dashboard:index' %}" class="dash-action-btn secondary">Dashboard</a>
+  </div>
+</div>
+
+<div class="rounds-table-wrap">
+  <table class="rounds-table">
+    <thead>
+      <tr>
+        <th>Round</th>
+        <th>Date</th>
+        <th>Status</th>
+        <th>Assigned to</th>
+        <th>Progress</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for round in rounds %}
+      <tr>
+        <td><strong>{{ round.name }}</strong></td>
+        <td>{{ round.date|date:"d M Y" }}</td>
+        <td><span class="round-status status-{{ round.status }}">{{ round.get_status_display }}</span></td>
+        <td>{% if round.assigned_to %}{{ round.assigned_to.get_full_name|default:round.assigned_to.username }}{% else %}—{% endif %}</td>
+        <td>
+          {% with total=round.total_items done=round.completed_items %}
+          {% if total > 0 %}
+          <span class="progress-bar-wrap">
+            <span class="progress-bar-fill" style="width:{% widthratio done total 100 %}%"></span>
+          </span>
+          {{ done }}/{{ total }}
+          {% else %}
+          <span style="color:#aaa;">0 items</span>
+          {% endif %}
+          {% endwith %}
+        </td>
+        <td class="action-links">
+          <a href="{% url 'monitoring:round_detail' round_id=round.pk %}">View</a>
+          {% if show_manager_links %}
+          <a href="{% url 'monitoring:round_edit' round_id=round.pk %}">Edit</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="6" class="empty-state">No rounds yet.{% if show_manager_links %} <a href="{% url 'monitoring:round_create' %}">Create the first round</a>.{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

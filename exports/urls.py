@@ -15,4 +15,8 @@ urlpatterns = [
     path('photo-metadata.xlsx/', views.photo_metadata_excel, name='photo_metadata_excel'),
     path('treatments.csv/', views.treatments_csv, name='treatments_csv'),
     path('treatments.xlsx/', views.treatments_excel, name='treatments_excel'),
+    path('daily-rounds.csv/', views.daily_rounds_csv, name='daily_rounds_csv'),
+    path('daily-rounds.xlsx/', views.daily_rounds_excel, name='daily_rounds_excel'),
+    path('daily-round-items.csv/', views.daily_round_items_csv, name='daily_round_items_csv'),
+    path('daily-round-items.xlsx/', views.daily_round_items_excel, name='daily_round_items_excel'),
 ]

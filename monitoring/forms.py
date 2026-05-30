@@ -3,7 +3,11 @@ import datetime
 from django import forms
 from django.utils import timezone
 
-from .models import Observation, ObservationPhoto, QuantityEvent, Treatment
+from django.contrib.auth import get_user_model
+
+from .models import DailyRound, Observation, ObservationPhoto, QuantityEvent, Treatment
+
+User = get_user_model()
 
 
 class ObservationForm(forms.ModelForm):
@@ -250,4 +254,64 @@ class TreatmentOutcomeForm(forms.ModelForm):
         fields = ['outcome', 'notes']
         widgets = {
             'notes': forms.Textarea(attrs={'rows': 3, 'placeholder': 'Update notes…'}),
+        }
+
+
+class DailyRoundCreateForm(forms.ModelForm):
+
+    MODE_ALL_ACTIVE = 'all_active'
+    MODE_NOT_CHECKED_7_DAYS = 'not_checked_7_days'
+    MODE_WATCH_SICK_CRITICAL = 'watch_sick_critical'
+    MODE_BY_LOCATION = 'by_location_text'
+    GENERATION_MODE_CHOICES = [
+        (MODE_ALL_ACTIVE, 'All active units'),
+        (MODE_NOT_CHECKED_7_DAYS, 'Not checked in 7 days'),
+        (MODE_WATCH_SICK_CRITICAL, 'Watch / Sick / Critical status'),
+        (MODE_BY_LOCATION, 'By location text'),
+    ]
+
+    generation_mode = forms.ChoiceField(
+        choices=GENERATION_MODE_CHOICES,
+        label='Unit selection',
+        initial=MODE_ALL_ACTIVE,
+        help_text='Which active units to include in this round.',
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['assigned_to'].queryset = User.objects.filter(is_active=True).order_by('username')
+        self.fields['assigned_to'].required = False
+        self.fields['date'].widget = forms.DateInput(attrs={'type': 'date'})
+
+    def clean(self):
+        cleaned = super().clean()
+        mode = cleaned.get('generation_mode')
+        location_filter = cleaned.get('location_filter', '').strip()
+        if mode == self.MODE_BY_LOCATION and not location_filter:
+            self.add_error('location_filter', 'Location filter is required when using "By location text" mode.')
+        return cleaned
+
+    class Meta:
+        model = DailyRound
+        fields = ['name', 'date', 'assigned_to', 'location_filter', 'notes']
+        widgets = {
+            'notes': forms.Textarea(attrs={'rows': 3, 'placeholder': 'Optional notes about this round…'}),
+            'location_filter': forms.TextInput(attrs={'placeholder': 'e.g. Bay 3, Screen House A'}),
+            'name': forms.TextInput(attrs={'placeholder': 'e.g. Morning round 2026-06-01'}),
+        }
+
+
+class DailyRoundEditForm(forms.ModelForm):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['assigned_to'].queryset = User.objects.filter(is_active=True).order_by('username')
+        self.fields['assigned_to'].required = False
+        self.fields['date'].widget = forms.DateInput(attrs={'type': 'date'})
+
+    class Meta:
+        model = DailyRound
+        fields = ['name', 'date', 'status', 'assigned_to', 'notes']
+        widgets = {
+            'notes': forms.Textarea(attrs={'rows': 3}),
         }

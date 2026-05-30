@@ -468,3 +468,96 @@ class TreatmentExportTest(TestCase):
     def test_manager_can_access_treatment_exports(self):
         response = self.client.get('/exports/treatments.csv/')
         self.assertEqual(response.status_code, 200)
+
+
+# ── Daily round exports ───────────────────────────────────────────────────────
+
+import datetime as dt
+
+from monitoring.models import DailyRound, DailyRoundItem
+
+
+def make_round(name='Export test round', date=None, **kwargs):
+    if date is None:
+        date = dt.date.today()
+    return DailyRound.objects.create(name=name, date=date, **kwargs)
+
+
+def make_round_item_exp(daily_round, unit, **kwargs):
+    return DailyRoundItem.objects.create(daily_round=daily_round, tracking_unit=unit, **kwargs)
+
+
+def make_observer_rnd(username='exp_obs_rnd'):
+    user = User.objects.create_user(username=username, password=_PASSWORD)
+    group, _ = Group.objects.get_or_create(name='Observer')
+    user.groups.add(group)
+    return user
+
+
+class DailyRoundExportTest(TestCase):
+
+    def setUp(self):
+        self.manager = make_manager(username='exp_mgr_rnd')
+        self.client.login(username='exp_mgr_rnd', password=_PASSWORD)
+
+    def test_export_index_includes_daily_rounds_links(self):
+        response = self.client.get('/exports/')
+        self.assertContains(response, '/exports/daily-rounds.csv/')
+        self.assertContains(response, '/exports/daily-rounds.xlsx/')
+
+    def test_export_index_includes_daily_round_items_links(self):
+        response = self.client.get('/exports/')
+        self.assertContains(response, '/exports/daily-round-items.csv/')
+        self.assertContains(response, '/exports/daily-round-items.xlsx/')
+
+    def test_daily_rounds_csv_returns_200(self):
+        response = self.client.get('/exports/daily-rounds.csv/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_daily_rounds_csv_includes_expected_headers(self):
+        response = self.client.get('/exports/daily-rounds.csv/')
+        headers = csv_headers(response)
+        for col in ['id', 'name', 'date', 'status', 'total_items', 'completed_items']:
+            self.assertIn(col, headers)
+
+    def test_daily_rounds_csv_includes_round_data(self):
+        make_round('Export round ABC')
+        reader = csv.DictReader(StringIO(
+            self.client.get('/exports/daily-rounds.csv/').content.decode()
+        ))
+        rows = list(reader)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['name'], 'Export round ABC')
+
+    def test_daily_round_items_csv_returns_200(self):
+        response = self.client.get('/exports/daily-round-items.csv/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_daily_round_items_csv_includes_item_data(self):
+        unit = make_unit('TU-EXP-RND-001')
+        dr = make_round('Items round')
+        make_round_item_exp(dr, unit)
+        reader = csv.DictReader(StringIO(
+            self.client.get('/exports/daily-round-items.csv/').content.decode()
+        ))
+        rows = list(reader)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['tracking_unit_code'], unit.unit_code)
+
+    def test_daily_rounds_excel_returns_200(self):
+        response = self.client.get('/exports/daily-rounds.xlsx/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_daily_round_items_excel_returns_200(self):
+        response = self.client.get('/exports/daily-round-items.xlsx/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_observer_cannot_access_daily_round_exports(self):
+        obs = make_observer_rnd()
+        self.client.login(username='exp_obs_rnd', password=_PASSWORD)
+        response = self.client.get('/exports/daily-rounds.csv/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_can_access_daily_round_exports(self):
+        response = self.client.get('/exports/daily-rounds.csv/')
+        self.assertEqual(response.status_code, 200)

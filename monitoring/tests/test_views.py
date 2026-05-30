@@ -1143,3 +1143,349 @@ class TreatmentOutcomeUpdateTest(TestCase):
         )
         response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
         self.assertContains(response, 'Resolved')
+
+
+# ── Daily round view tests ────────────────────────────────────────────────────
+
+import datetime as dt
+
+from monitoring.models import DailyRound, DailyRoundItem
+
+
+def make_round(name='Test round', date=None, **kwargs):
+    if date is None:
+        date = dt.date.today()
+    return DailyRound.objects.create(name=name, date=date, **kwargs)
+
+
+def make_round_item(daily_round, unit, **kwargs):
+    return DailyRoundItem.objects.create(daily_round=daily_round, tracking_unit=unit, **kwargs)
+
+
+class RoundListAccessTest(TestCase):
+
+    def test_anonymous_redirects_to_login(self):
+        response = self.client.get('/monitoring/rounds/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+    def test_observer_can_access_round_list(self):
+        obs = make_observer(username='rd_obs_list')
+        self.client.login(username='rd_obs_list', password=_PASSWORD)
+        response = self.client.get('/monitoring/rounds/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_manager_can_access_round_list(self):
+        mgr = make_manager(username='rd_mgr_list')
+        self.client.login(username='rd_mgr_list', password=_PASSWORD)
+        response = self.client.get('/monitoring/rounds/')
+        self.assertEqual(response.status_code, 200)
+
+
+class RoundCreateAccessTest(TestCase):
+
+    def test_observer_cannot_access_round_create_page(self):
+        obs = make_observer(username='rd_obs_create')
+        self.client.login(username='rd_obs_create', password=_PASSWORD)
+        response = self.client.get('/monitoring/rounds/new/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_can_access_round_create_page(self):
+        mgr = make_manager(username='rd_mgr_create')
+        self.client.login(username='rd_mgr_create', password=_PASSWORD)
+        response = self.client.get('/monitoring/rounds/new/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_round_create_form_shows_generation_modes(self):
+        mgr = make_manager(username='rd_mgr_modes')
+        self.client.login(username='rd_mgr_modes', password=_PASSWORD)
+        response = self.client.get('/monitoring/rounds/new/')
+        self.assertContains(response, 'all_active')
+
+    def test_manager_can_create_all_active_round(self):
+        mgr = make_manager(username='rd_mgr_allact')
+        self.client.login(username='rd_mgr_allact', password=_PASSWORD)
+        make_unit('TU-RD-ALLACT-001')
+        response = self.client.post('/monitoring/rounds/new/', {
+            'name': 'Morning round',
+            'date': dt.date.today().isoformat(),
+            'generation_mode': 'all_active',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(DailyRound.objects.count(), 1)
+
+
+class RoundDetailAccessTest(TestCase):
+
+    def setUp(self):
+        self.dr = make_round()
+
+    def test_anonymous_round_detail_redirects_to_login(self):
+        response = self.client.get(f'/monitoring/rounds/{self.dr.pk}/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+    def test_observer_can_access_round_detail(self):
+        obs = make_observer(username='rd_obs_detail')
+        self.client.login(username='rd_obs_detail', password=_PASSWORD)
+        response = self.client.get(f'/monitoring/rounds/{self.dr.pk}/')
+        self.assertEqual(response.status_code, 200)
+
+
+class RoundDetailContentTest(TestCase):
+
+    def setUp(self):
+        self.mgr = make_manager(username='rd_mgr_det')
+        self.client.login(username='rd_mgr_det', password=_PASSWORD)
+        self.unit = make_unit('TU-RD-DET-001', crop_name='Baobab', location_text='Bay 2', quantity=5)
+        self.dr = make_round('Morning check')
+        self.item = make_round_item(self.dr, self.unit)
+
+    def test_round_detail_shows_unit_code(self):
+        response = self.client.get(f'/monitoring/rounds/{self.dr.pk}/')
+        self.assertContains(response, self.unit.unit_code)
+
+    def test_round_detail_shows_progress_count(self):
+        response = self.client.get(f'/monitoring/rounds/{self.dr.pk}/')
+        # total = 1, done = 0
+        self.assertContains(response, '0')
+        self.assertContains(response, '1')
+
+    def test_round_detail_shows_observe_link_with_round_item_param(self):
+        response = self.client.get(f'/monitoring/rounds/{self.dr.pk}/')
+        self.assertContains(response, f'round_item={self.item.pk}')
+
+
+class ObserveFromRoundTest(TestCase):
+
+    def setUp(self):
+        self.observer = make_observer(username='rd_obs_observe')
+        self.client.login(username='rd_obs_observe', password=_PASSWORD)
+        self.unit = make_unit('TU-RD-OBS-001', quantity=5)
+        self.dr = make_round()
+        self.item = make_round_item(self.dr, self.unit)
+
+    def test_invalid_round_item_for_different_unit_returns_404(self):
+        other_unit = make_unit('TU-RD-OTHER-001', quantity=5)
+        other_item = make_round_item(self.dr, other_unit)
+        response = self.client.get(
+            f'/observe/{self.unit.unit_code}/?round_item={other_item.pk}'
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_observation_from_round_marks_item_completed(self):
+        self.client.post(
+            f'/observe/{self.unit.unit_code}/?round_item={self.item.pk}',
+            {
+                'status': 'healthy',
+                'observation_type': 'routine',
+                'round_item': str(self.item.pk),
+            },
+        )
+        self.item.refresh_from_db()
+        self.assertTrue(self.item.completed)
+
+    def test_observation_from_round_links_observation_to_item(self):
+        self.client.post(
+            f'/observe/{self.unit.unit_code}/?round_item={self.item.pk}',
+            {
+                'status': 'healthy',
+                'observation_type': 'routine',
+                'round_item': str(self.item.pk),
+            },
+        )
+        self.item.refresh_from_db()
+        self.assertIsNotNone(self.item.observation_id)
+
+    def test_observation_from_round_sets_completed_at(self):
+        self.client.post(
+            f'/observe/{self.unit.unit_code}/?round_item={self.item.pk}',
+            {
+                'status': 'healthy',
+                'observation_type': 'routine',
+                'round_item': str(self.item.pk),
+            },
+        )
+        self.item.refresh_from_db()
+        self.assertIsNotNone(self.item.completed_at)
+
+    def test_observation_from_round_redirects_to_round_detail(self):
+        response = self.client.post(
+            f'/observe/{self.unit.unit_code}/?round_item={self.item.pk}',
+            {
+                'status': 'healthy',
+                'observation_type': 'routine',
+                'round_item': str(self.item.pk),
+            },
+        )
+        self.assertRedirects(
+            response,
+            f'/monitoring/rounds/{self.dr.pk}/',
+            fetch_redirect_response=False,
+        )
+
+    def test_completing_first_item_updates_round_to_in_progress(self):
+        second_unit = make_unit('TU-RD-OBS-002', quantity=5)
+        make_round_item(self.dr, second_unit)
+        self.client.post(
+            f'/observe/{self.unit.unit_code}/?round_item={self.item.pk}',
+            {
+                'status': 'healthy',
+                'observation_type': 'routine',
+                'round_item': str(self.item.pk),
+            },
+        )
+        self.dr.refresh_from_db()
+        self.assertEqual(self.dr.status, DailyRound.STATUS_IN_PROGRESS)
+
+    def test_completing_all_items_updates_round_to_completed(self):
+        self.client.post(
+            f'/observe/{self.unit.unit_code}/?round_item={self.item.pk}',
+            {
+                'status': 'healthy',
+                'observation_type': 'routine',
+                'round_item': str(self.item.pk),
+            },
+        )
+        self.dr.refresh_from_db()
+        self.assertEqual(self.dr.status, DailyRound.STATUS_COMPLETED)
+
+    def test_normal_observation_without_round_item_still_works(self):
+        response = self.client.post(
+            f'/observe/{self.unit.unit_code}/',
+            {
+                'status': 'healthy',
+                'observation_type': 'routine',
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(
+            response,
+            f'/observe/{self.unit.unit_code}/timeline/',
+            fetch_redirect_response=False,
+        )
+
+    def test_round_list_returns_200(self):
+        response = self.client.get('/monitoring/rounds/')
+        self.assertEqual(response.status_code, 200)
+
+
+# ── Fix 1: N+1 verification — round_detail uses annotations ──────────────────
+
+class RoundDetailAnnotationTest(TestCase):
+
+    def setUp(self):
+        self.mgr = make_manager(username='rd_ann_mgr')
+        self.client.login(username='rd_ann_mgr', password=_PASSWORD)
+        self.unit = make_unit('TU-ANN-001', quantity=5)
+        self.dr = make_round('Annotation round')
+        make_round_item(self.dr, self.unit)
+        make_observation(self.unit, status='sick')
+
+    def test_round_detail_shows_status_from_annotation(self):
+        response = self.client.get(f'/monitoring/rounds/{self.dr.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Sick')
+
+    def test_round_detail_shows_not_checked_when_no_obs(self):
+        unit2 = make_unit('TU-ANN-002', quantity=5)
+        make_round_item(self.dr, unit2)
+        response = self.client.get(f'/monitoring/rounds/{self.dr.pk}/')
+        self.assertContains(response, 'Not checked')
+
+
+# ── Fix 2: round editing views ────────────────────────────────────────────────
+
+class RoundEditAccessTest(TestCase):
+
+    def setUp(self):
+        self.dr = make_round()
+
+    def test_anonymous_edit_redirects_to_login(self):
+        response = self.client.get(f'/monitoring/rounds/{self.dr.pk}/edit/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+    def test_observer_gets_403_on_edit(self):
+        obs = make_observer(username='rd_edit_obs')
+        self.client.login(username='rd_edit_obs', password=_PASSWORD)
+        response = self.client.get(f'/monitoring/rounds/{self.dr.pk}/edit/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_can_access_edit_page(self):
+        mgr = make_manager(username='rd_edit_mgr')
+        self.client.login(username='rd_edit_mgr', password=_PASSWORD)
+        response = self.client.get(f'/monitoring/rounds/{self.dr.pk}/edit/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_edit_page_shows_current_round_name(self):
+        mgr = make_manager(username='rd_edit_mgr2')
+        self.client.login(username='rd_edit_mgr2', password=_PASSWORD)
+        response = self.client.get(f'/monitoring/rounds/{self.dr.pk}/edit/')
+        self.assertContains(response, self.dr.name)
+
+    def test_manager_can_update_round_status(self):
+        mgr = make_manager(username='rd_edit_mgr3')
+        self.client.login(username='rd_edit_mgr3', password=_PASSWORD)
+        self.client.post(f'/monitoring/rounds/{self.dr.pk}/edit/', {
+            'name': self.dr.name,
+            'date': self.dr.date.isoformat(),
+            'status': DailyRound.STATUS_CANCELLED,
+        })
+        self.dr.refresh_from_db()
+        self.assertEqual(self.dr.status, DailyRound.STATUS_CANCELLED)
+
+    def test_edit_redirects_to_round_detail_on_success(self):
+        mgr = make_manager(username='rd_edit_mgr4')
+        self.client.login(username='rd_edit_mgr4', password=_PASSWORD)
+        response = self.client.post(f'/monitoring/rounds/{self.dr.pk}/edit/', {
+            'name': 'Updated name',
+            'date': self.dr.date.isoformat(),
+            'status': DailyRound.STATUS_PLANNED,
+        })
+        self.assertRedirects(
+            response,
+            f'/monitoring/rounds/{self.dr.pk}/',
+            fetch_redirect_response=False,
+        )
+
+    def test_manager_sees_edit_link_on_round_list(self):
+        mgr = make_manager(username='rd_edit_list_mgr')
+        self.client.login(username='rd_edit_list_mgr', password=_PASSWORD)
+        response = self.client.get('/monitoring/rounds/')
+        self.assertContains(response, f'/monitoring/rounds/{self.dr.pk}/edit/')
+
+    def test_manager_sees_edit_link_on_round_detail(self):
+        mgr = make_manager(username='rd_edit_det_mgr')
+        self.client.login(username='rd_edit_det_mgr', password=_PASSWORD)
+        response = self.client.get(f'/monitoring/rounds/{self.dr.pk}/')
+        self.assertContains(response, f'/monitoring/rounds/{self.dr.pk}/edit/')
+
+
+# ── Fix 3: missed automation from views ───────────────────────────────────────
+
+class RoundListMissedAutomationTest(TestCase):
+
+    def setUp(self):
+        obs = make_observer(username='rd_missed_obs')
+        self.client.login(username='rd_missed_obs', password=_PASSWORD)
+
+    def test_round_list_auto_marks_overdue_round_missed(self):
+        yesterday = dt.date.today() - dt.timedelta(days=1)
+        dr = DailyRound.objects.create(name='Old', date=yesterday, status=DailyRound.STATUS_PLANNED)
+        self.client.get('/monitoring/rounds/')
+        dr.refresh_from_db()
+        self.assertEqual(dr.status, DailyRound.STATUS_MISSED)
+
+    def test_round_detail_auto_marks_overdue_round_missed(self):
+        yesterday = dt.date.today() - dt.timedelta(days=1)
+        dr = DailyRound.objects.create(name='Old det', date=yesterday, status=DailyRound.STATUS_PLANNED)
+        self.client.get(f'/monitoring/rounds/{dr.pk}/')
+        dr.refresh_from_db()
+        self.assertEqual(dr.status, DailyRound.STATUS_MISSED)
+
+    def test_todays_round_stays_planned_after_list_view(self):
+        dr = DailyRound.objects.create(name='Today', date=dt.date.today())
+        self.client.get('/monitoring/rounds/')
+        dr.refresh_from_db()
+        self.assertEqual(dr.status, DailyRound.STATUS_PLANNED)

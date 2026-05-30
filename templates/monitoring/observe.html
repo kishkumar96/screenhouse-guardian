@@ -170,8 +170,16 @@
   {% endif %}
 </div>
 
+{% if round_item %}
+<div style="background:#e3f2fd;border-left:4px solid #1565c0;padding:0.65rem 1rem;margin-bottom:1rem;border-radius:0 4px 4px 0;font-size:0.875rem;color:#1565c0;">
+  <strong>Round:</strong> {{ round_item.daily_round.name }} &mdash; {{ round_item.daily_round.date|date:"d M Y" }}
+  &nbsp;·&nbsp; <a href="{% url 'monitoring:round_detail' round_id=round_item.daily_round_id %}" style="color:#1565c0;">Back to round</a>
+</div>
+{% endif %}
+
 <form method="post" enctype="multipart/form-data" novalidate>
   {% csrf_token %}
+  {% if round_item %}<input type="hidden" name="round_item" value="{{ round_item.pk }}">{% endif %}
 
   {% if form.non_field_errors %}
   <div class="non-field-errors">

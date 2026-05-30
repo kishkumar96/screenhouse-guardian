@@ -125,5 +125,23 @@
     </div>
   </div>
 
+  <div class="export-group">
+    <h3>Daily Rounds</h3>
+    <p class="export-desc">One row per round — name, date, status, assigned user, item counts, created by.</p>
+    <div class="export-links">
+      <a class="csv" href="{% url 'exports:daily_rounds_csv' %}">CSV</a>
+      <a class="xlsx" href="{% url 'exports:daily_rounds_excel' %}">Excel</a>
+    </div>
+  </div>
+
+  <div class="export-group">
+    <h3>Daily Round Items</h3>
+    <p class="export-desc">One row per checklist item — round, unit, crop, location, completed status, completed time, observation ID.</p>
+    <div class="export-links">
+      <a class="csv" href="{% url 'exports:daily_round_items_csv' %}">CSV</a>
+      <a class="xlsx" href="{% url 'exports:daily_round_items_excel' %}">Excel</a>
+    </div>
+  </div>
+
 </div>
 {% endblock %}

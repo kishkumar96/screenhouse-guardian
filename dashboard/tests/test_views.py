@@ -381,3 +381,51 @@ class DashboardFollowUpSummaryTest(TestCase):
         # The value shown should be 0 (not 1)
         context = response.context
         self.assertEqual(context['pending_followups'], 0)
+
+
+# ── Dashboard daily round summary tests ───────────────────────────────────────
+
+import datetime as dt
+
+from monitoring.models import DailyRound, DailyRoundItem
+
+
+def make_daily_round(name='Test round', date=None, **kwargs):
+    if date is None:
+        date = dt.date.today()
+    return DailyRound.objects.create(name=name, date=date, **kwargs)
+
+
+def make_round_item(daily_round, unit, **kwargs):
+    return DailyRoundItem.objects.create(daily_round=daily_round, tracking_unit=unit, **kwargs)
+
+
+class DashboardRoundSummaryTest(TestCase):
+
+    def setUp(self):
+        self.observer = make_observer(username='dash_rd_obs')
+        self.client.login(username='dash_rd_obs', password=_PASSWORD)
+
+    def test_dashboard_shows_rounds_today_count(self):
+        make_daily_round()
+        response = self.client.get('/dashboard/')
+        self.assertEqual(response.context['rounds_today_count'], 1)
+
+    def test_dashboard_shows_round_items_completed_today(self):
+        unit = make_unit('TU-DASH-RD-001')
+        dr = make_daily_round()
+        make_round_item(dr, unit, completed=True)
+        response = self.client.get('/dashboard/')
+        self.assertEqual(response.context['round_items_completed_today'], 1)
+
+    def test_dashboard_shows_round_items_pending_today(self):
+        unit = make_unit('TU-DASH-RD-002')
+        dr = make_daily_round()
+        make_round_item(dr, unit, completed=False)
+        response = self.client.get('/dashboard/')
+        self.assertEqual(response.context['round_items_pending_today'], 1)
+
+    def test_dashboard_links_to_round_detail_in_today_table(self):
+        dr = make_daily_round(name='Visible round')
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, f'/monitoring/rounds/{dr.pk}/')
