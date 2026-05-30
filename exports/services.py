@@ -3,9 +3,17 @@ import os
 
 import openpyxl
 from django.http import HttpResponse
+from django.utils.timezone import is_aware, make_naive
 
 from inventory.models import TrackingUnit
 from monitoring.models import Observation, ObservationPhoto, QuantityEvent
+
+
+def _naive(dt):
+    """Strip timezone from a datetime so openpyxl can write it to a cell."""
+    if dt is not None and is_aware(dt):
+        return make_naive(dt)
+    return dt
 
 
 # ── Tracking units ────────────────────────────────────────────────────────────
@@ -53,7 +61,7 @@ def export_tracking_units_excel_response():
     ws.title = 'Tracking Units'
     ws.append(_TRACKING_UNIT_HEADERS)
     for unit in TrackingUnit.objects.all().order_by('unit_code'):
-        ws.append(_tracking_unit_row(unit))
+        ws.append(_excel_row(_tracking_unit_row(unit)))
     return _excel_response(wb, 'tracking_units.xlsx')
 
 
@@ -111,7 +119,7 @@ def export_observations_excel_response():
         .select_related('tracking_unit', 'created_by')
         .order_by('created_at')
     ):
-        ws.append(_observation_row(obs))
+        ws.append(_excel_row(_observation_row(obs)))
     return _excel_response(wb, 'observations.xlsx')
 
 
@@ -160,7 +168,7 @@ def export_quantity_events_excel_response():
         .select_related('tracking_unit', 'created_by')
         .order_by('event_date')
     ):
-        ws.append(_quantity_event_row(event))
+        ws.append(_excel_row(_quantity_event_row(event)))
     return _excel_response(wb, 'quantity_events.xlsx')
 
 
@@ -210,11 +218,16 @@ def export_photo_metadata_excel_response():
         .select_related('observation', 'observation__tracking_unit')
         .order_by('uploaded_at')
     ):
-        ws.append(_photo_metadata_row(photo))
+        ws.append(_excel_row(_photo_metadata_row(photo)))
     return _excel_response(wb, 'photo_metadata.xlsx')
 
 
-# ── Internal helper ───────────────────────────────────────────────────────────
+# ── Internal helpers ──────────────────────────────────────────────────────────
+
+def _excel_row(row):
+    """Strip timezone info from datetime values so openpyxl can write them."""
+    return [_naive(v) if hasattr(v, 'tzinfo') else v for v in row]
+
 
 def _excel_response(workbook, filename):
     response = HttpResponse(

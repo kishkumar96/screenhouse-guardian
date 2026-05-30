@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Login — Screen House Guardian{% endblock %}
+
+{% block extra_style %}
+.login-wrap {
+  max-width: 400px;
+  margin: 2rem auto;
+}
+.login-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1.5rem 1.75rem;
+}
+.login-card h2 {
+  margin: 0 0 1.25rem;
+  font-size: 1.3rem;
+}
+.login-field {
+  margin-bottom: 1rem;
+}
+.login-field label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.3rem;
+}
+.login-field input {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+.login-field input:focus {
+  outline: 2px solid #2e7d32;
+  border-color: #2e7d32;
+}
+.login-btn {
+  width: 100%;
+  padding: 0.75rem;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 0.25rem;
+}
+.login-btn:hover { background: #1b5e20; }
+.login-errors {
+  background: #fce4ec;
+  border: 1px solid #e91e63;
+  color: #880e4f;
+  padding: 0.6rem 0.85rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+{% endblock %}
+
+{% block content %}
+<div class="login-wrap">
+  <div class="login-card">
+    <h2>Sign in</h2>
+
+    {% if form.non_field_errors %}
+    <div class="login-errors">
+      {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+      {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+
+      <div class="login-field">
+        <label for="{{ form.username.id_for_label }}">Username</label>
+        {{ form.username }}
+      </div>
+      <div class="login-field">
+        <label for="{{ form.password.id_for_label }}">Password</label>
+        {{ form.password }}
+      </div>
+
+      <button type="submit" class="login-btn">Log in</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

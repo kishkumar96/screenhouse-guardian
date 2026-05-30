@@ -36,6 +36,34 @@ nav a:hover {
   color: #fff;
 }
 
+.nav-auth {
+  float: right;
+  font-size: 0.9rem;
+}
+
+.nav-username {
+  color: #c8e6c9;
+  margin-right: 0.5rem;
+}
+
+.nav-logout-form {
+  display: inline;
+}
+
+.nav-logout-btn {
+  background: none;
+  border: none;
+  color: #c8e6c9;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.nav-logout-btn:hover {
+  color: #fff;
+}
+
 .content {
   max-width: 960px;
   margin: 1.5rem auto;

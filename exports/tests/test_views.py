@@ -2,15 +2,27 @@ import csv
 import tempfile
 from io import BytesIO, StringIO
 
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.test import TestCase, override_settings
 
 from inventory.models import TrackingUnit
 from monitoring.models import Observation, ObservationPhoto, QuantityEvent
 
+User = get_user_model()
+
 _XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+_PASSWORD = 'testpass123'
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
+
+def make_manager(username='exp_manager'):
+    user = User.objects.create_user(username=username, password=_PASSWORD)
+    group, _ = Group.objects.get_or_create(name='Manager')
+    user.groups.add(group)
+    return user
+
 
 def make_unit(unit_code, **kwargs):
     defaults = dict(
@@ -70,6 +82,10 @@ def csv_headers(response):
 
 class ExportIndexTest(TestCase):
 
+    def setUp(self):
+        self.user = make_manager()
+        self.client.login(username='exp_manager', password=_PASSWORD)
+
     def test_index_returns_200(self):
         response = self.client.get('/exports/')
         self.assertEqual(response.status_code, 200)
@@ -98,6 +114,10 @@ class ExportIndexTest(TestCase):
 # ── Tracking units CSV ────────────────────────────────────────────────────────
 
 class TrackingUnitsCsvTest(TestCase):
+
+    def setUp(self):
+        self.user = make_manager()
+        self.client.login(username='exp_manager', password=_PASSWORD)
 
     def test_returns_200(self):
         response = self.client.get('/exports/tracking-units.csv/')
@@ -129,6 +149,10 @@ class TrackingUnitsCsvTest(TestCase):
 
 class ObservationsCsvTest(TestCase):
 
+    def setUp(self):
+        self.user = make_manager()
+        self.client.login(username='exp_manager', password=_PASSWORD)
+
     def test_returns_200(self):
         response = self.client.get('/exports/observations.csv/')
         self.assertEqual(response.status_code, 200)
@@ -152,6 +176,8 @@ class ObservationsCsvTest(TestCase):
 class QuantityEventsCsvTest(TestCase):
 
     def setUp(self):
+        self.user = make_manager()
+        self.client.login(username='exp_manager', password=_PASSWORD)
         self.unit = make_unit('TU-QE-EXP-001', quantity=20)
 
     def test_returns_200(self):
@@ -169,8 +195,8 @@ class QuantityEventsCsvTest(TestCase):
         response = self.client.get('/exports/quantity-events.csv/')
         content = response.content.decode()
         self.assertIn('TU-QE-EXP-001', content)
-        self.assertIn('20', content)   # quantity_before
-        self.assertIn('-3', content)   # quantity_change
+        self.assertIn('20', content)
+        self.assertIn('-3', content)
 
 
 # ── Photo metadata CSV ────────────────────────────────────────────────────────
@@ -179,6 +205,8 @@ class QuantityEventsCsvTest(TestCase):
 class PhotoMetadataCsvTest(TestCase):
 
     def setUp(self):
+        self.user = make_manager()
+        self.client.login(username='exp_manager', password=_PASSWORD)
         unit = make_unit('TU-PH-EXP-001', quantity=5)
         obs = make_observation(unit, status=Observation.STATUS_HEALTHY)
         ObservationPhoto.objects.create(
@@ -211,6 +239,10 @@ class PhotoMetadataCsvTest(TestCase):
 # ── Excel exports ─────────────────────────────────────────────────────────────
 
 class ExcelExportTest(TestCase):
+
+    def setUp(self):
+        self.user = make_manager()
+        self.client.login(username='exp_manager', password=_PASSWORD)
 
     def test_tracking_units_excel_returns_200(self):
         response = self.client.get('/exports/tracking-units.xlsx/')

@@ -1,8 +1,22 @@
 import tempfile
 
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.test import TestCase, override_settings
 
 from inventory.models import TrackingUnit
+
+User = get_user_model()
+
+_PASSWORD = 'testpass123'
+
+
+def make_user(username, group_name=None):
+    user = User.objects.create_user(username=username, password=_PASSWORD)
+    if group_name:
+        group, _ = Group.objects.get_or_create(name=group_name)
+        user.groups.add(group)
+    return user
 
 
 def make_unit(unit_code, **kwargs):
@@ -26,6 +40,8 @@ class QrIndexTest(TestCase):
 class LabelViewTest(TestCase):
 
     def setUp(self):
+        self.user = make_user('qr_observer', 'Observer')
+        self.client.login(username='qr_observer', password=_PASSWORD)
         self.unit = make_unit(
             'TU-LABEL-001',
             crop_name='Baobab',
@@ -68,6 +84,8 @@ class LabelViewTest(TestCase):
 class GenerateViewTest(TestCase):
 
     def setUp(self):
+        self.user = make_user('qr_manager', 'Manager')
+        self.client.login(username='qr_manager', password=_PASSWORD)
         self.unit = make_unit('TU-GENVIEW-001')
 
     def test_generate_creates_qr_code(self):
@@ -99,5 +117,6 @@ class GenerateViewTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_generate_get_returns_405(self):
+        # GET is not allowed even for managers
         response = self.client.get(f'/qr/units/{self.unit.unit_code}/generate/')
         self.assertEqual(response.status_code, 405)

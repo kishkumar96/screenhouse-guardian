@@ -20,6 +20,17 @@
       <a href="{% url 'monitoring:index' %}">Monitoring</a>
       <a href="{% url 'dashboard:index' %}">Dashboard</a>
       <a href="{% url 'exports:index' %}">Exports</a>
+      <span class="nav-auth">
+        {% if user.is_authenticated %}
+          <span class="nav-username">{{ user.username }}</span>
+          <form method="post" action="{% url 'logout' %}" class="nav-logout-form">
+            {% csrf_token %}
+            <button type="submit" class="nav-logout-btn">Logout</button>
+          </form>
+        {% else %}
+          <a href="{% url 'login' %}">Login</a>
+        {% endif %}
+      </span>
     </nav>
   </header>
 

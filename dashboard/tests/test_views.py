@@ -1,7 +1,20 @@
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.test import TestCase
 
 from inventory.models import TrackingUnit
 from monitoring.models import Observation
+
+User = get_user_model()
+
+_PASSWORD = 'testpass123'
+
+
+def make_observer(username='dash_observer'):
+    user = User.objects.create_user(username=username, password=_PASSWORD)
+    group, _ = Group.objects.get_or_create(name='Observer')
+    user.groups.add(group)
+    return user
 
 
 def make_unit(unit_code, **kwargs):
@@ -26,6 +39,10 @@ def make_observation(unit, **kwargs):
 
 
 class DashboardIndexTest(TestCase):
+
+    def setUp(self):
+        self.user = make_observer()
+        self.client.login(username='dash_observer', password=_PASSWORD)
 
     def test_index_returns_200(self):
         response = self.client.get('/dashboard/')
@@ -99,7 +116,6 @@ class DashboardIndexTest(TestCase):
         make_unit('TU-NQRC-001')
         make_unit('TU-NQRC-002')
         qr_unit = make_unit('TU-YQRC-001')
-        # Set qr_code path directly without needing a real image file
         TrackingUnit.objects.filter(pk=qr_unit.pk).update(qr_code='qr_codes/test.png')
         response = self.client.get('/dashboard/')
         self.assertEqual(response.context['units_with_qr'], 1)

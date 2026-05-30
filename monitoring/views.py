@@ -2,15 +2,18 @@ from django.contrib import messages
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
+from config.permissions import observer_required
 from inventory.models import TrackingUnit
 from .forms import ObservationForm, ObservationPhotoForm
 from .models import Observation
 
 
+@observer_required
 def index(request):
     return HttpResponse('<h1>Monitoring</h1><p>Use <code>/observe/&lt;unit_code&gt;/</code> to record an observation.</p>')
 
 
+@observer_required
 def observe(request, unit_code):
     unit = get_object_or_404(TrackingUnit, unit_code=unit_code)
 
@@ -57,6 +60,7 @@ def observe(request, unit_code):
     })
 
 
+@observer_required
 def timeline(request, unit_code):
     unit = get_object_or_404(TrackingUnit, unit_code=unit_code)
     observations = (

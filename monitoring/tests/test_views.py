@@ -2,12 +2,24 @@ import tempfile
 from io import BytesIO
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.test import TestCase, override_settings
 
 from inventory.models import TrackingUnit
 from monitoring.models import MAX_OBSERVATION_IMAGE_SIZE_BYTES, Observation, ObservationPhoto
 
 User = get_user_model()
+
+_PASSWORD = 'testpass123'
+
+
+# ── Shared helpers ────────────────────────────────────────────────────────────
+
+def make_observer(username='mon_observer'):
+    user = User.objects.create_user(username=username, password=_PASSWORD)
+    group, _ = Group.objects.get_or_create(name='Observer')
+    user.groups.add(group)
+    return user
 
 
 def make_unit(unit_code, quantity=10, **kwargs):
@@ -54,7 +66,14 @@ def create_oversized_file():
 
 class MonitoringIndexTest(TestCase):
 
-    def test_index_returns_200(self):
+    def test_index_redirects_anonymous_user_to_login(self):
+        response = self.client.get('/monitoring/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+    def test_index_returns_200_for_observer(self):
+        user = make_observer()
+        self.client.login(username=user.username, password=_PASSWORD)
         response = self.client.get('/monitoring/')
         self.assertEqual(response.status_code, 200)
 
@@ -64,6 +83,8 @@ class MonitoringIndexTest(TestCase):
 class ObserveFormGetTest(TestCase):
 
     def setUp(self):
+        self.user = make_observer()
+        self.client.login(username='mon_observer', password=_PASSWORD)
         self.unit = make_unit('TU-OBS-GET-001', crop_name='Baobab', location_text='Bay 3', quantity=5)
 
     def test_observe_returns_200(self):
@@ -101,6 +122,8 @@ class ObserveFormGetTest(TestCase):
 class ObserveFormPostTest(TestCase):
 
     def setUp(self):
+        self.user = make_observer()
+        self.client.login(username='mon_observer', password=_PASSWORD)
         self.unit = make_unit('TU-OBS-POST-001', quantity=10)
 
     def _post(self, data=None):
@@ -171,17 +194,16 @@ class ObserveFormPostTest(TestCase):
         })
         self.assertEqual(Observation.objects.filter(tracking_unit=self.unit).count(), 2)
 
-    def test_created_by_is_none_when_anonymous(self):
-        self._post()
-        obs = Observation.objects.get(tracking_unit=self.unit)
-        self.assertIsNone(obs.created_by)
+    def test_anonymous_post_redirects_to_login(self):
+        self.client.logout()
+        response = self._post()
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
 
     def test_created_by_is_set_when_logged_in(self):
-        user = User.objects.create_user(username='observer', password='pass')
-        self.client.login(username='observer', password='pass')
         self._post()
         obs = Observation.objects.get(tracking_unit=self.unit)
-        self.assertEqual(obs.created_by, user)
+        self.assertEqual(obs.created_by, self.user)
 
     def test_post_to_missing_unit_returns_404(self):
         response = self.client.post('/observe/NO-SUCH-UNIT/', {
@@ -197,6 +219,8 @@ class ObserveFormPostTest(TestCase):
 class ObserveFormPostWithPhotoTest(TestCase):
 
     def setUp(self):
+        self.user = make_observer()
+        self.client.login(username='mon_observer', password=_PASSWORD)
         self.unit = make_unit('TU-OBS-PHOTO-001', quantity=5)
 
     def test_post_with_valid_photo_creates_observation_and_photo(self):
@@ -233,6 +257,8 @@ class ObserveFormPostWithPhotoTest(TestCase):
 class TimelineViewTest(TestCase):
 
     def setUp(self):
+        self.user = make_observer()
+        self.client.login(username='mon_observer', password=_PASSWORD)
         self.unit = make_unit('TU-TL-001', crop_name='Cycad', quantity=3)
 
     def test_timeline_returns_200(self):
@@ -268,6 +294,8 @@ class TimelineViewTest(TestCase):
 class OversizedPhotoTest(TestCase):
 
     def setUp(self):
+        self.user = make_observer()
+        self.client.login(username='mon_observer', password=_PASSWORD)
         self.unit = make_unit('TU-BIG-PHOTO-001', quantity=5)
 
     def test_oversized_photo_rejected_and_creates_no_observation(self):
@@ -303,6 +331,8 @@ class OversizedPhotoTest(TestCase):
 class TimelinePhotoTest(TestCase):
 
     def setUp(self):
+        self.user = make_observer()
+        self.client.login(username='mon_observer', password=_PASSWORD)
         self.unit = make_unit('TU-TL-PHOTO-001', quantity=5)
         self.obs = make_observation(self.unit, status=Observation.STATUS_HEALTHY)
 
@@ -324,12 +354,9 @@ class TimelinePhotoTest(TestCase):
         self.assertContains(response, 'target="_blank"')
 
     def test_timeline_falls_back_to_original_when_no_thumbnail(self):
-        # Create a photo record with no thumbnail (bypass save() to skip generation)
         photo = ObservationPhoto(observation=self.obs, image=create_test_jpeg())
-        # Save without triggering thumbnail generation by calling super().save() manually
         from django.db.models import Model
         Model.save(photo)
         ObservationPhoto.objects.filter(pk=photo.pk).update(thumbnail='')
         response = self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
-        # Original image URL used as src when thumbnail is absent
         self.assertContains(response, 'observation_photos')
