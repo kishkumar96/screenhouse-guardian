@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Inventory Reconciliation — Screen House Guardian{% endblock %}
+
+{% block extra_style %}
+.rc-heading { margin-bottom: 1.25rem; }
+.rc-heading h2 { margin: 0 0 0.25rem; font-size: 1.4rem; }
+.rc-heading p  { margin: 0; color: #666; font-size: 0.9rem; }
+
+.rc-filters {
+  background: #f9fbe7;
+  border: 1px solid #e6ee9c;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: flex-end;
+}
+.rc-filter-group { display: flex; flex-direction: column; gap: 0.2rem; }
+.rc-filter-group label { font-size: 0.78rem; font-weight: 600; color: #555; }
+.rc-filter-group input[type=text] {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  min-width: 200px;
+}
+.rc-filter-btn {
+  padding: 0.4rem 1rem;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rc-filter-btn:hover { background: #1b5e20; }
+
+.rc-table-wrap { overflow-x: auto; }
+.rc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+.rc-table th {
+  background: #f1f8e9;
+  color: #2e7d32;
+  text-align: left;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border-bottom: 1px solid #ddd;
+}
+.rc-table td {
+  padding: 0.5rem 0.85rem;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+.rc-table tr:last-child td { border-bottom: none; }
+.unit-code { font-family: monospace; font-size: 0.85rem; font-weight: 600; }
+.rc-qty-input {
+  width: 90px;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+.rc-submit-btn {
+  display: block;
+  margin-top: 1rem;
+  padding: 0.75rem 1.5rem;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rc-submit-btn:hover { background: #1b5e20; }
+.rc-hint { font-size: 0.82rem; color: #777; margin: 0.5rem 0 1rem; }
+.empty-state {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: #888;
+  font-size: 0.95rem;
+}
+{% endblock %}
+
+{% block content %}
+<div class="rc-heading">
+  <h2>Inventory Reconciliation</h2>
+  <p>Enter the counted quantity for each unit. Only changed values create a recount event.</p>
+</div>
+
+<form class="rc-filters" method="get" novalidate>
+  <div class="rc-filter-group">
+    <label for="id_location">Location</label>
+    <input type="text" name="location" id="id_location"
+           value="{{ location_filter }}" placeholder="e.g. Bay 3">
+  </div>
+  <button type="submit" class="rc-filter-btn">Filter</button>
+  {% if location_filter %}<a href="{% url 'monitoring:reconcile_inventory' %}" style="font-size:0.8rem;color:#555;align-self:center;">Clear filter</a>{% endif %}
+</form>
+
+{% if units %}
+<p class="rc-hint">Leave a field unchanged (or blank) to skip that unit.</p>
+<form method="post" novalidate>
+  {% csrf_token %}
+  <input type="hidden" name="location" value="{{ location_filter }}">
+  <div class="rc-table-wrap">
+    <table class="rc-table">
+      <thead>
+        <tr>
+          <th>Unit</th>
+          <th>Crop</th>
+          <th>Location</th>
+          <th>Current qty</th>
+          <th>Counted qty</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for unit in units %}
+        <tr>
+          <td class="unit-code">{{ unit.unit_code }}</td>
+          <td>{{ unit.display_crop }}</td>
+          <td>{{ unit.display_location|default:"—" }}</td>
+          <td>{{ unit.quantity }}</td>
+          <td>
+            <input type="number" class="rc-qty-input" name="qty_{{ unit.pk }}"
+                   value="{{ unit.quantity }}" min="0">
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <button type="submit" class="rc-submit-btn">Submit reconciliation</button>
+</form>
+{% else %}
+<div class="empty-state">
+  <p>No active units match this filter.</p>
+</div>
+{% endif %}
+
+{% if results %}
+<h3 class="section-heading" style="margin-top:1.75rem;">Changes recorded</h3>
+<div class="rc-table-wrap">
+  <table class="rc-table">
+    <thead>
+      <tr>
+        <th>Unit</th>
+        <th>Before</th>
+        <th>Change</th>
+        <th>After</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for event in results %}
+      <tr>
+        <td class="unit-code">{{ event.tracking_unit.unit_code }}</td>
+        <td>{{ event.quantity_before }}</td>
+        <td>{% if event.quantity_change > 0 %}+{% endif %}{{ event.quantity_change }}</td>
+        <td>{{ event.quantity_after }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

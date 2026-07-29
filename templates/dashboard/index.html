@@ -258,6 +258,7 @@
     <a href="{% url 'monitoring:follow_up_list' %}" class="dash-action-btn secondary">Follow-ups</a>
     {% if show_manager_links %}
       <a href="{% url 'monitoring:weekly_report' %}" class="dash-action-btn secondary">Weekly report</a>
+      <a href="{% url 'monitoring:reconcile_inventory' %}" class="dash-action-btn secondary">Reconcile inventory</a>
     {% endif %}
     <a href="{% url 'inventory:archived_tracking_units' %}" class="dash-action-btn secondary">Archived units</a>
     {% if show_staff_links %}

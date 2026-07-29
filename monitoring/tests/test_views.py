@@ -1864,3 +1864,105 @@ class WeeklyReportContentTest(TestCase):
         response = self.client.get('/monitoring/reports/weekly/?end_date=not-a-date')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Current week')
+
+
+# ── Inventory reconciliation ─────────────────────────────────────────────────
+
+class ReconcileInventoryAccessTest(TestCase):
+
+    def test_anonymous_user_redirected_to_login(self):
+        response = self.client.get('/monitoring/reconcile/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+    def test_observer_forbidden(self):
+        make_observer(username='rc_observer_access')
+        self.client.login(username='rc_observer_access', password=_PASSWORD)
+        response = self.client.get('/monitoring/reconcile/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_allowed(self):
+        make_manager(username='rc_manager_access')
+        self.client.login(username='rc_manager_access', password=_PASSWORD)
+        response = self.client.get('/monitoring/reconcile/')
+        self.assertEqual(response.status_code, 200)
+
+
+class ReconcileInventoryContentTest(TestCase):
+
+    def setUp(self):
+        make_manager(username='rc_mgr_content')
+        self.client.login(username='rc_mgr_content', password=_PASSWORD)
+        self.unit = make_unit('TU-RC-CONTENT-001', crop_name='Cassava',
+                               location_text='Bay 2', quantity=12)
+
+    def test_lists_active_unit_with_current_quantity_prefilled(self):
+        response = self.client.get('/monitoring/reconcile/')
+        self.assertContains(response, 'TU-RC-CONTENT-001')
+        self.assertContains(response, 'value="12"')
+
+    def test_archived_unit_not_listed(self):
+        self.unit.is_active = False
+        self.unit.save()
+        response = self.client.get('/monitoring/reconcile/')
+        self.assertNotContains(response, 'TU-RC-CONTENT-001')
+
+    def test_location_filter_narrows_results(self):
+        make_unit('TU-RC-CONTENT-002', location_text='Bay 9', quantity=3)
+        response = self.client.get('/monitoring/reconcile/?location=Bay 2')
+        self.assertContains(response, 'TU-RC-CONTENT-001')
+        self.assertNotContains(response, 'TU-RC-CONTENT-002')
+
+    def test_empty_state_when_no_units_match(self):
+        response = self.client.get('/monitoring/reconcile/?location=NoSuchPlace')
+        self.assertContains(response, 'No active units match')
+
+
+class ReconcileInventoryPostTest(TestCase):
+
+    def setUp(self):
+        make_manager(username='rc_mgr_post')
+        self.client.login(username='rc_mgr_post', password=_PASSWORD)
+        self.unit = make_unit('TU-RC-POST-001', quantity=10)
+
+    def test_changed_quantity_creates_recount_event(self):
+        self.client.post('/monitoring/reconcile/', {f'qty_{self.unit.pk}': '7'})
+        self.unit.refresh_from_db()
+        self.assertEqual(self.unit.quantity, 7)
+        event = QuantityEvent.objects.get(tracking_unit=self.unit)
+        self.assertEqual(event.event_type, QuantityEvent.EVENT_TYPE_RECOUNT)
+        self.assertEqual(event.quantity_before, 10)
+        self.assertEqual(event.quantity_change, -3)
+        self.assertEqual(event.quantity_after, 7)
+
+    def test_unchanged_quantity_creates_no_event(self):
+        self.client.post('/monitoring/reconcile/', {f'qty_{self.unit.pk}': '10'})
+        self.assertFalse(QuantityEvent.objects.filter(tracking_unit=self.unit).exists())
+
+    def test_blank_quantity_is_skipped(self):
+        self.client.post('/monitoring/reconcile/', {f'qty_{self.unit.pk}': ''})
+        self.unit.refresh_from_db()
+        self.assertEqual(self.unit.quantity, 10)
+
+    def test_negative_result_is_rejected(self):
+        response = self.client.post('/monitoring/reconcile/', {f'qty_{self.unit.pk}': '-5'})
+        self.unit.refresh_from_db()
+        self.assertEqual(self.unit.quantity, 10)
+
+    def test_non_numeric_value_shows_error_and_is_skipped(self):
+        response = self.client.post('/monitoring/reconcile/', {f'qty_{self.unit.pk}': 'abc'})
+        self.assertEqual(response.status_code, 200)
+        self.unit.refresh_from_db()
+        self.assertEqual(self.unit.quantity, 10)
+
+    def test_success_message_shown_after_reconciliation(self):
+        response = self.client.post(
+            '/monitoring/reconcile/', {f'qty_{self.unit.pk}': '5'}, follow=True
+        )
+        self.assertContains(response, 'Reconciled 1 unit')
+
+    def test_observer_cannot_post(self):
+        make_observer(username='rc_post_obs')
+        self.client.login(username='rc_post_obs', password=_PASSWORD)
+        response = self.client.post('/monitoring/reconcile/', {f'qty_{self.unit.pk}': '5'})
+        self.assertEqual(response.status_code, 403)

@@ -17,4 +17,6 @@ urlpatterns = [
     path('follow-ups/', views.follow_up_list, name='follow_up_list'),
     # Weekly report
     path('reports/weekly/', views.weekly_report, name='weekly_report'),
+    # Inventory reconciliation
+    path('reconcile/', views.reconcile_inventory, name='reconcile_inventory'),
 ]

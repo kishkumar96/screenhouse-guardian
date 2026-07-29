@@ -17,7 +17,9 @@ from .forms import (
     TreatmentForm,
     TreatmentOutcomeForm,
 )
-from .models import DailyRound, DailyRoundItem, MAX_OBSERVATION_IMAGE_SIZE_MB, Observation, Treatment
+from .models import (
+    DailyRound, DailyRoundItem, MAX_OBSERVATION_IMAGE_SIZE_MB, Observation, QuantityEvent, Treatment,
+)
 from .services import (
     apply_quantity_event,
     create_daily_round_with_items,
@@ -501,4 +503,80 @@ def weekly_report(request):
         'prev_week_end': (end_date - timedelta(days=7)).isoformat(),
         'next_week_end': (end_date + timedelta(days=7)).isoformat(),
         'is_current_week': end_date >= timezone.localdate(),
+    })
+
+
+# ── Inventory reconciliation ─────────────────────────────────────────────────────
+
+@manager_required
+def reconcile_inventory(request):
+    location_filter = (
+        request.POST.get('location', '') if request.method == 'POST'
+        else request.GET.get('location', '')
+    ).strip()
+
+    units = (
+        TrackingUnit.objects.filter(is_active=True)
+        .select_related('crop', 'accession', 'position__bench__screen_house__site')
+        .order_by('unit_code')
+    )
+    if location_filter:
+        units = units.filter(
+            Q(location_text__icontains=location_filter) |
+            Q(position__bench__name__icontains=location_filter) |
+            Q(position__bench__screen_house__name__icontains=location_filter) |
+            Q(position__bench__screen_house__site__name__icontains=location_filter)
+        )
+
+    results = []
+    error_count = 0
+    if request.method == 'POST':
+        for unit in units:
+            raw_value = request.POST.get(f'qty_{unit.pk}', '').strip()
+            if not raw_value:
+                continue
+            try:
+                counted = int(raw_value)
+            except ValueError:
+                messages.error(request, f'{unit.unit_code}: enter a whole number.')
+                error_count += 1
+                continue
+            if counted == unit.quantity:
+                continue
+            try:
+                event = apply_quantity_event(
+                    tracking_unit=unit,
+                    event_type=QuantityEvent.EVENT_TYPE_RECOUNT,
+                    quantity_change=counted - unit.quantity,
+                    user=request.user,
+                    reason='Inventory reconciliation',
+                )
+                results.append(event)
+            except ValidationError as e:
+                message = e.messages[0] if hasattr(e, 'messages') and e.messages else str(e)
+                messages.error(request, f'{unit.unit_code}: {message}')
+                error_count += 1
+
+        if results:
+            messages.success(request, f'Reconciled {len(results)} unit(s).')
+        elif error_count == 0:
+            messages.info(request, 'No quantity changes were submitted.')
+
+        units = (
+            TrackingUnit.objects.filter(is_active=True)
+            .select_related('crop', 'accession', 'position__bench__screen_house__site')
+            .order_by('unit_code')
+        )
+        if location_filter:
+            units = units.filter(
+                Q(location_text__icontains=location_filter) |
+                Q(position__bench__name__icontains=location_filter) |
+                Q(position__bench__screen_house__name__icontains=location_filter) |
+                Q(position__bench__screen_house__site__name__icontains=location_filter)
+            )
+
+    return render(request, 'monitoring/reconcile_inventory.html', {
+        'units': units,
+        'location_filter': location_filter,
+        'results': results,
     })
