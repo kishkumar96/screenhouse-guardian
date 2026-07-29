@@ -1753,3 +1753,68 @@ class FollowUpListContentTest(TestCase):
         self.client.login(username='fu_obs_content', password=_PASSWORD)
         response = self.client.get('/monitoring/follow-ups/?status=due_today&treatment_type=insecticide')
         self.assertContains(response, 'No follow-ups match')
+
+
+# ── Weekly report ─────────────────────────────────────────────────────────────
+
+class WeeklyReportAccessTest(TestCase):
+
+    def test_anonymous_user_redirected_to_login(self):
+        response = self.client.get('/monitoring/reports/weekly/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+    def test_observer_forbidden(self):
+        make_observer(username='wr_observer_access')
+        self.client.login(username='wr_observer_access', password=_PASSWORD)
+        response = self.client.get('/monitoring/reports/weekly/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_allowed(self):
+        make_manager(username='wr_manager_access')
+        self.client.login(username='wr_manager_access', password=_PASSWORD)
+        response = self.client.get('/monitoring/reports/weekly/')
+        self.assertEqual(response.status_code, 200)
+
+
+class WeeklyReportContentTest(TestCase):
+
+    def setUp(self):
+        make_manager(username='wr_mgr_content')
+        self.client.login(username='wr_mgr_content', password=_PASSWORD)
+        self.unit = make_unit('TU-WR-CONTENT-001', crop_name='Cassava')
+
+    def test_shows_date_range_heading(self):
+        response = self.client.get('/monitoring/reports/weekly/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Weekly Report')
+
+    def test_shows_observation_logged_this_week(self):
+        make_observation(self.unit, status=Observation.STATUS_SICK)
+        response = self.client.get('/monitoring/reports/weekly/')
+        self.assertContains(response, 'Sick')
+
+    def test_shows_treatment_applied_this_week(self):
+        _make_treatment_with_followup(self.unit, treatment_type=Treatment.TYPE_FUNGICIDE)
+        response = self.client.get('/monitoring/reports/weekly/')
+        self.assertContains(response, 'Fungicide')
+
+    def test_current_week_hides_next_week_link(self):
+        response = self.client.get('/monitoring/reports/weekly/')
+        self.assertContains(response, 'Current week')
+        self.assertNotContains(response, 'Next week')
+
+    def test_previous_week_link_navigates_correctly(self):
+        response = self.client.get('/monitoring/reports/weekly/')
+        prev_end = (_dt.date.today() - _dt.timedelta(days=7)).isoformat()
+        self.assertContains(response, f'?end_date={prev_end}')
+
+    def test_past_week_shows_next_week_link(self):
+        old_end = (_dt.date.today() - _dt.timedelta(days=14)).isoformat()
+        response = self.client.get(f'/monitoring/reports/weekly/?end_date={old_end}')
+        self.assertContains(response, 'Next week')
+
+    def test_invalid_end_date_falls_back_to_current_week(self):
+        response = self.client.get('/monitoring/reports/weekly/?end_date=not-a-date')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Current week')

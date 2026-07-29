@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db.models import OuterRef, Q, Subquery
@@ -19,6 +21,7 @@ from .models import DailyRound, DailyRoundItem, MAX_OBSERVATION_IMAGE_SIZE_MB, O
 from .services import (
     apply_quantity_event,
     create_daily_round_with_items,
+    get_weekly_summary,
     mark_overdue_rounds_missed,
     update_daily_round_status,
 )
@@ -465,4 +468,27 @@ def follow_up_list(request):
         'treatment_type_choices': Treatment.TYPE_CHOICES,
         'today': today,
         'show_manager_links': is_manager(request.user),
+    })
+
+
+# ── Weekly report ───────────────────────────────────────────────────────────────
+
+@manager_required
+def weekly_report(request):
+    end_date_param = request.GET.get('end_date', '')
+    end_date = timezone.localdate()
+    if end_date_param:
+        try:
+            end_date = date.fromisoformat(end_date_param)
+        except ValueError:
+            messages.error(request, 'Invalid date. Showing the current week instead.')
+            end_date = timezone.localdate()
+
+    summary = get_weekly_summary(end_date=end_date)
+
+    return render(request, 'monitoring/weekly_report.html', {
+        'summary': summary,
+        'prev_week_end': (end_date - timedelta(days=7)).isoformat(),
+        'next_week_end': (end_date + timedelta(days=7)).isoformat(),
+        'is_current_week': end_date >= timezone.localdate(),
     })

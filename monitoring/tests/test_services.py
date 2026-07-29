@@ -1,15 +1,17 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.utils import timezone
 
 from inventory.models import TrackingUnit
 import datetime
 
-from monitoring.models import DailyRound, DailyRoundItem, Observation, QuantityEvent
+from monitoring.models import DailyRound, DailyRoundItem, Observation, QuantityEvent, Treatment
 from monitoring.services import (
     apply_quantity_event,
     create_daily_round_with_items,
     get_units_for_round_generation,
+    get_weekly_summary,
     update_daily_round_status,
     MODE_ALL_ACTIVE,
     MODE_NOT_CHECKED_7_DAYS,
@@ -458,3 +460,171 @@ class MarkOverdueRoundsMissedTest(TestCase):
         mark_overdue_rounds_missed()
         dr.refresh_from_db()
         self.assertEqual(dr.status, DailyRound.STATUS_CANCELLED)
+
+
+class GetWeeklySummaryTest(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username='weekly-report-user',
+            password='test-password-123',
+        )
+        self.today = timezone.localdate()
+
+    def test_observation_created_today_counted_in_current_week(self):
+        unit = make_container('TU-WR-OBS-001')
+        Observation.objects.create(tracking_unit=unit, status=Observation.STATUS_SICK)
+
+        summary = get_weekly_summary(end_date=self.today)
+
+        self.assertEqual(summary['observation_total'], 1)
+        self.assertEqual(dict(summary['observation_status_breakdown'])['Sick'], 1)
+
+    def test_observation_outside_window_not_counted(self):
+        unit = make_container('TU-WR-OBS-002')
+        obs = Observation.objects.create(tracking_unit=unit, status=Observation.STATUS_HEALTHY)
+        Observation.objects.filter(pk=obs.pk).update(
+            created_at=timezone.now() - datetime.timedelta(days=30)
+        )
+
+        summary = get_weekly_summary(end_date=self.today)
+
+        self.assertEqual(summary['observation_total'], 0)
+
+    def test_treatment_within_window_counted(self):
+        unit = make_container('TU-WR-TX-001')
+        Treatment.objects.create(
+            tracking_unit=unit,
+            treatment_type=Treatment.TYPE_FUNGICIDE,
+            reason='test',
+            treatment_date=timezone.now() - datetime.timedelta(days=2),
+        )
+
+        summary = get_weekly_summary(end_date=self.today)
+
+        self.assertEqual(summary['treatment_total'], 1)
+        self.assertEqual(dict(summary['treatment_type_breakdown'])['Fungicide'], 1)
+
+    def test_treatment_outside_window_not_counted(self):
+        unit = make_container('TU-WR-TX-002')
+        Treatment.objects.create(
+            tracking_unit=unit,
+            treatment_type=Treatment.TYPE_FUNGICIDE,
+            reason='test',
+            treatment_date=timezone.now() - datetime.timedelta(days=20),
+        )
+
+        summary = get_weekly_summary(end_date=self.today)
+
+        self.assertEqual(summary['treatment_total'], 0)
+
+    def test_daily_round_status_counted_in_breakdown(self):
+        DailyRound.objects.create(name='R1', date=self.today, status=DailyRound.STATUS_COMPLETED)
+
+        summary = get_weekly_summary(end_date=self.today)
+
+        self.assertEqual(dict(summary['round_status_breakdown'])['Completed'], 1)
+
+    def test_round_item_completion_counted(self):
+        unit = make_container('TU-WR-RND-001')
+        dr = DailyRound.objects.create(name='R2', date=self.today)
+        DailyRoundItem.objects.create(daily_round=dr, tracking_unit=unit, completed=True)
+
+        summary = get_weekly_summary(end_date=self.today)
+
+        self.assertEqual(summary['round_items_total'], 1)
+        self.assertEqual(summary['round_items_completed'], 1)
+
+    def test_follow_up_still_overdue_counted(self):
+        unit = make_container('TU-WR-FU-001')
+        Treatment.objects.create(
+            tracking_unit=unit,
+            treatment_type=Treatment.TYPE_FUNGICIDE,
+            reason='test',
+            follow_up_date=self.today - datetime.timedelta(days=3),
+            outcome=Treatment.OUTCOME_PENDING,
+        )
+
+        summary = get_weekly_summary(end_date=self.today)
+
+        self.assertEqual(summary['follow_ups_still_overdue'], 1)
+
+    def test_follow_up_due_today_not_counted_as_overdue(self):
+        unit = make_container('TU-WR-FU-002')
+        Treatment.objects.create(
+            tracking_unit=unit,
+            treatment_type=Treatment.TYPE_FUNGICIDE,
+            reason='test',
+            follow_up_date=self.today,
+            outcome=Treatment.OUTCOME_PENDING,
+        )
+
+        summary = get_weekly_summary(end_date=self.today)
+
+        self.assertEqual(summary['follow_ups_still_overdue'], 0)
+
+    def test_follow_up_resolved_this_week_counted(self):
+        unit = make_container('TU-WR-FU-003')
+        tx = Treatment.objects.create(
+            tracking_unit=unit,
+            treatment_type=Treatment.TYPE_FUNGICIDE,
+            reason='test',
+            follow_up_date=self.today,
+            outcome=Treatment.OUTCOME_PENDING,
+        )
+        tx.outcome = Treatment.OUTCOME_RESOLVED
+        tx.save(update_fields=['outcome', 'updated_at'])
+
+        summary = get_weekly_summary(end_date=self.today)
+
+        self.assertEqual(summary['follow_ups_resolved'], 1)
+
+    def test_quantity_loss_total_sums_death_and_loss_events(self):
+        unit = make_container('TU-WR-QTY-001', quantity=20)
+        apply_quantity_event(
+            tracking_unit=unit, event_type=QuantityEvent.EVENT_TYPE_DEATH,
+            quantity_change=-5, user=self.user,
+        )
+        apply_quantity_event(
+            tracking_unit=unit, event_type=QuantityEvent.EVENT_TYPE_LOSS,
+            quantity_change=-3, user=self.user,
+        )
+
+        summary = get_weekly_summary(end_date=self.today)
+
+        self.assertEqual(summary['quantity_lost_total'], 8)
+
+    def test_recount_event_not_counted_as_loss(self):
+        unit = make_container('TU-WR-QTY-002', quantity=20)
+        apply_quantity_event(
+            tracking_unit=unit, event_type=QuantityEvent.EVENT_TYPE_RECOUNT,
+            quantity_change=-2, user=self.user,
+        )
+
+        summary = get_weekly_summary(end_date=self.today)
+
+        self.assertEqual(summary['quantity_lost_total'], 0)
+
+    def test_new_unit_counted_in_current_week(self):
+        make_container('TU-WR-NEW-001')
+
+        summary = get_weekly_summary(end_date=self.today)
+
+        self.assertGreaterEqual(summary['new_units'], 1)
+
+    def test_archived_unit_counted_in_current_week(self):
+        unit = make_container('TU-WR-ARCH-001')
+        unit.is_active = False
+        unit.save()
+
+        summary = get_weekly_summary(end_date=self.today)
+
+        self.assertGreaterEqual(summary['archived_units'], 1)
+
+    def test_previous_week_excludes_current_activity(self):
+        unit = make_container('TU-WR-PREV-001')
+        Observation.objects.create(tracking_unit=unit, status=Observation.STATUS_HEALTHY)
+
+        summary = get_weekly_summary(end_date=self.today - datetime.timedelta(days=14))
+
+        self.assertEqual(summary['observation_total'], 0)

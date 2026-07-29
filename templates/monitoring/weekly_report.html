@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}Weekly Report — Screen House Guardian{% endblock %}
+
+{% block extra_style %}
+.wr-heading { margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 0.75rem; }
+.wr-heading h2 { margin: 0 0 0.25rem; font-size: 1.4rem; }
+.wr-heading p  { margin: 0; color: #666; font-size: 0.9rem; }
+.wr-nav { display: flex; gap: 0.5rem; align-items: center; }
+.wr-nav a {
+  font-size: 0.82rem;
+  color: #2e7d32;
+  text-decoration: none;
+  border: 1px solid #a5d6a7;
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+}
+.wr-nav a:hover { background: #e8f5e9; }
+.wr-nav .current-week { font-size: 0.8rem; color: #888; }
+
+.wr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.wr-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1rem 1.1rem;
+}
+.wr-card h3 {
+  margin: 0 0 0.6rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #2e7d32;
+}
+.wr-card .wr-total {
+  font-size: 1.8rem;
+  font-weight: 700;
+  line-height: 1.1;
+  margin-bottom: 0.5rem;
+}
+.wr-breakdown { list-style: none; margin: 0; padding: 0; font-size: 0.85rem; }
+.wr-breakdown li { display: flex; justify-content: space-between; padding: 0.15rem 0; border-bottom: 1px solid #f5f5f5; }
+.wr-breakdown li:last-child { border-bottom: none; }
+.wr-breakdown .wr-key { color: #555; }
+.wr-breakdown .wr-count { font-weight: 600; }
+
+.wr-card.alert .wr-total { color: #b71c1c; }
+.wr-card.warn .wr-total { color: #e65100; }
+.wr-card.ok .wr-total { color: #2e7d32; }
+{% endblock %}
+
+{% block content %}
+<div class="wr-heading">
+  <div>
+    <h2>Weekly Report</h2>
+    <p>{{ summary.start_date|date:"d M Y" }} – {{ summary.end_date|date:"d M Y" }}</p>
+  </div>
+  <div class="wr-nav">
+    <a href="?end_date={{ prev_week_end }}">&laquo; Previous week</a>
+    {% if is_current_week %}
+    <span class="current-week">Current week</span>
+    {% else %}
+    <a href="?end_date={{ next_week_end }}">Next week &raquo;</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="wr-grid">
+  <div class="wr-card">
+    <h3>Observations logged</h3>
+    <div class="wr-total">{{ summary.observation_total }}</div>
+    <ul class="wr-breakdown">
+      {% for label, count in summary.observation_status_breakdown %}
+      <li><span class="wr-key">{{ label }}</span><span class="wr-count">{{ count }}</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div class="wr-card">
+    <h3>Daily rounds</h3>
+    <div class="wr-total">
+      {{ summary.round_items_completed }} / {{ summary.round_items_total }}
+      <span style="font-size:0.9rem;color:#888;">items checked</span>
+    </div>
+    <ul class="wr-breakdown">
+      {% for label, count in summary.round_status_breakdown %}
+      <li><span class="wr-key">{{ label }}</span><span class="wr-count">{{ count }}</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div class="wr-card">
+    <h3>Treatments applied</h3>
+    <div class="wr-total">{{ summary.treatment_total }}</div>
+    <ul class="wr-breakdown">
+      {% for label, count in summary.treatment_type_breakdown %}
+      <li><span class="wr-key">{{ label }}</span><span class="wr-count">{{ count }}</span></li>
+      {% empty %}
+      <li><span class="wr-key">No treatments this week</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div class="wr-card {% if summary.follow_ups_still_overdue > 0 %}alert{% endif %}">
+    <h3>Follow-ups</h3>
+    <div class="wr-total">{{ summary.follow_ups_still_overdue }}</div>
+    <ul class="wr-breakdown">
+      <li><span class="wr-key">Still overdue</span><span class="wr-count">{{ summary.follow_ups_still_overdue }}</span></li>
+      <li><span class="wr-key">Resolved this week</span><span class="wr-count">{{ summary.follow_ups_resolved }}</span></li>
+    </ul>
+    <div style="margin-top:0.75rem;">
+      <a href="{% url 'monitoring:follow_up_list' %}?status=overdue" style="font-size:0.82rem;color:#2e7d32;">View overdue follow-ups &rarr;</a>
+    </div>
+  </div>
+
+  <div class="wr-card {% if summary.quantity_lost_total > 0 %}warn{% endif %}">
+    <h3>Quantity events</h3>
+    <div class="wr-total">{{ summary.quantity_lost_total }}</div>
+    <ul class="wr-breakdown">
+      <li><span class="wr-key">Units lost (death/loss)</span><span class="wr-count">{{ summary.quantity_lost_total }}</span></li>
+      <li><span class="wr-key">Total quantity events</span><span class="wr-count">{{ summary.quantity_event_total }}</span></li>
+    </ul>
+  </div>
+
+  <div class="wr-card ok">
+    <h3>Tracking units</h3>
+    <div class="wr-total">{{ summary.new_units }}</div>
+    <ul class="wr-breakdown">
+      <li><span class="wr-key">New this week</span><span class="wr-count">{{ summary.new_units }}</span></li>
+      <li><span class="wr-key">Archived this week</span><span class="wr-count">{{ summary.archived_units }}</span></li>
+    </ul>
+  </div>
+</div>
+{% endblock %}

@@ -15,4 +15,6 @@ urlpatterns = [
     path('rounds/<int:round_id>/edit/', views.round_edit, name='round_edit'),
     # Follow-up management
     path('follow-ups/', views.follow_up_list, name='follow_up_list'),
+    # Weekly report
+    path('reports/weekly/', views.weekly_report, name='weekly_report'),
 ]

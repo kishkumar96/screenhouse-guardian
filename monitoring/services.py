@@ -1,13 +1,13 @@
-from datetime import timedelta
+from datetime import datetime, time as dt_time, timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import OuterRef, Q, Subquery
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.utils import timezone
 
 from inventory.models import TrackingUnit
 
-from .models import DailyRound, DailyRoundItem, Observation, QuantityEvent
+from .models import DailyRound, DailyRoundItem, Observation, QuantityEvent, Treatment
 
 
 def apply_quantity_event(
@@ -207,3 +207,96 @@ def update_daily_round_status(daily_round):
     if daily_round.status != new_status:
         DailyRound.objects.filter(pk=daily_round.pk).update(status=new_status)
         daily_round.status = new_status
+
+
+# ── Weekly report ──────────────────────────────────────────────────────────────
+
+_LOSS_EVENT_TYPES = [QuantityEvent.EVENT_TYPE_DEATH, QuantityEvent.EVENT_TYPE_LOSS]
+
+_RESOLVED_TREATMENT_OUTCOMES = [
+    Treatment.OUTCOME_IMPROVED,
+    Treatment.OUTCOME_NO_CHANGE,
+    Treatment.OUTCOME_WORSENED,
+    Treatment.OUTCOME_RESOLVED,
+]
+
+
+def get_weekly_summary(end_date=None):
+    """
+    Summarise field activity for the 7-day period ending on end_date (inclusive).
+
+    end_date defaults to today. Returns a dict of counts used to render the
+    weekly report: observations by status, round completion, treatments
+    applied, follow-ups resolved/still overdue, quantity losses, and
+    tracking unit churn (created/archived).
+    """
+    if end_date is None:
+        end_date = timezone.localdate()
+    start_date = end_date - timedelta(days=6)
+
+    start_dt = timezone.make_aware(datetime.combine(start_date, dt_time.min))
+    end_dt = timezone.make_aware(datetime.combine(end_date, dt_time.max))
+
+    observations = Observation.objects.filter(created_at__range=(start_dt, end_dt))
+    observation_status_breakdown = [
+        (label, observations.filter(status=value).count())
+        for value, label in Observation.STATUS_CHOICES
+    ]
+
+    rounds_in_period = DailyRound.objects.filter(date__range=(start_date, end_date))
+    round_status_breakdown = [
+        (label, rounds_in_period.filter(status=value).count())
+        for value, label in DailyRound.STATUS_CHOICES
+    ]
+    round_items_in_period = DailyRoundItem.objects.filter(daily_round__in=rounds_in_period)
+    round_items_total = round_items_in_period.count()
+    round_items_completed = round_items_in_period.filter(completed=True).count()
+
+    treatments_in_period = Treatment.objects.filter(treatment_date__range=(start_dt, end_dt))
+    _treatment_type_labels = dict(Treatment.TYPE_CHOICES)
+    treatment_type_breakdown = [
+        (_treatment_type_labels.get(row['treatment_type'], row['treatment_type']), row['count'])
+        for row in (
+            treatments_in_period
+            .values('treatment_type')
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+    ]
+
+    follow_ups_resolved = Treatment.objects.filter(
+        outcome__in=_RESOLVED_TREATMENT_OUTCOMES,
+        updated_at__range=(start_dt, end_dt),
+    ).count()
+    follow_ups_still_overdue = Treatment.objects.filter(
+        outcome=Treatment.OUTCOME_PENDING,
+        follow_up_date__isnull=False,
+        follow_up_date__lt=end_date,
+    ).count()
+
+    quantity_events_in_period = QuantityEvent.objects.filter(event_date__range=(start_dt, end_dt))
+    lost_changes = quantity_events_in_period.filter(
+        event_type__in=_LOSS_EVENT_TYPES
+    ).values_list('quantity_change', flat=True)
+    quantity_lost_total = -sum(lost_changes)
+
+    new_units = TrackingUnit.objects.filter(created_at__range=(start_dt, end_dt)).count()
+    archived_units = TrackingUnit.objects.filter(archived_at__range=(start_dt, end_dt)).count()
+
+    return {
+        'start_date': start_date,
+        'end_date': end_date,
+        'observation_total': observations.count(),
+        'observation_status_breakdown': observation_status_breakdown,
+        'round_status_breakdown': round_status_breakdown,
+        'round_items_total': round_items_total,
+        'round_items_completed': round_items_completed,
+        'treatment_total': treatments_in_period.count(),
+        'treatment_type_breakdown': treatment_type_breakdown,
+        'follow_ups_resolved': follow_ups_resolved,
+        'follow_ups_still_overdue': follow_ups_still_overdue,
+        'quantity_event_total': quantity_events_in_period.count(),
+        'quantity_lost_total': quantity_lost_total,
+        'new_units': new_units,
+        'archived_units': archived_units,
+    }
