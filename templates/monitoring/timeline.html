@@ -208,6 +208,21 @@
   font-weight: 600;
   margin-top: 0.3rem;
 }
+.movement-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-left: 3px solid #64b5f6;
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.875rem;
+}
+.movement-path {
+  font-size: 0.9rem;
+  color: #333;
+}
+.movement-reason { color: #555; font-style: italic; margin-top: 0.2rem; }
+.movement-meta { font-size: 0.8rem; color: #777; margin-top: 0.25rem; }
 {% endblock %}
 
 {% block content %}
@@ -238,6 +253,7 @@
   {% if show_manager_links %}
   <a href="{% url 'monitoring:create_quantity_event' unit_code=unit.unit_code %}" class="secondary">Record quantity change</a>
   <a href="{% url 'monitoring:create_treatment' unit_code=unit.unit_code %}" class="secondary" style="border-color:#f9a825;color:#f57f17;">Record treatment</a>
+  <a href="{% url 'inventory:move_tracking_unit' unit_code=unit.unit_code %}" class="secondary" style="border-color:#1565c0;color:#1565c0;">Move unit</a>
   <a href="{% url 'inventory:archive_tracking_unit' unit_code=unit.unit_code %}" class="secondary" style="border-color:#e65100;color:#e65100;">Archive unit</a>
   {% endif %}
   {% endif %}
@@ -263,6 +279,20 @@
   <p class="qty-event-meta">
     {{ event.event_date|date:"d M Y, H:i" }}
     {% if event.created_by %} — {{ event.created_by.get_full_name|default:event.created_by.username }}{% endif %}
+  </p>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if movements %}
+<h3 class="section-heading" style="margin-top:1.75rem;">Movement History</h3>
+{% for move in movements %}
+<div class="movement-card">
+  <div class="movement-path">{{ move.from_display }} &rarr; {{ move.to_display }}</div>
+  {% if move.reason %}<p class="movement-reason">"{{ move.reason }}"</p>{% endif %}
+  <p class="movement-meta">
+    {{ move.moved_at|date:"d M Y, H:i" }}
+    {% if move.moved_by %} &mdash; {{ move.moved_by.get_full_name|default:move.moved_by.username }}{% endif %}
   </p>
 </div>
 {% endfor %}

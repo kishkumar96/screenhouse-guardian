@@ -1103,6 +1103,52 @@ class TreatmentTimelineTest(TestCase):
         self.assertNotContains(response, 'Record treatment')
 
 
+class TimelineMovementHistoryTest(TestCase):
+
+    def setUp(self):
+        from inventory.services import record_movement
+        self.manager = make_manager(username='mv_mgr_tl')
+        self.observer = make_observer(username='mv_obs_tl')
+        self.unit = make_unit('TU-MOVE-TL-001', quantity=5, location_text='Bay A')
+        record_movement(
+            tracking_unit=self.unit,
+            to_location_text='Bay B',
+            user=self.manager,
+            reason='Better airflow',
+        )
+
+    def _get_timeline(self, user):
+        self.client.login(username=user.username, password=_PASSWORD)
+        return self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+
+    def test_timeline_shows_movement_history_heading(self):
+        response = self._get_timeline(self.observer)
+        self.assertContains(response, 'Movement History')
+
+    def test_timeline_shows_from_and_to_locations(self):
+        response = self._get_timeline(self.observer)
+        self.assertContains(response, 'Bay A')
+        self.assertContains(response, 'Bay B')
+
+    def test_timeline_shows_move_reason(self):
+        response = self._get_timeline(self.observer)
+        self.assertContains(response, 'Better airflow')
+
+    def test_manager_sees_move_unit_link_for_active_unit(self):
+        response = self._get_timeline(self.manager)
+        self.assertContains(response, 'Move unit')
+
+    def test_observer_does_not_see_move_unit_link(self):
+        response = self._get_timeline(self.observer)
+        self.assertNotContains(response, 'Move unit')
+
+    def test_archived_unit_does_not_show_move_unit_link(self):
+        self.unit.is_active = False
+        self.unit.save()
+        response = self._get_timeline(self.manager)
+        self.assertNotContains(response, 'Move unit')
+
+
 class TreatmentOutcomeUpdateTest(TestCase):
 
     def setUp(self):

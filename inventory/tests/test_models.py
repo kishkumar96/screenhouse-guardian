@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from inventory.models import (
-    Accession, Batch, Bench, Crop, Position, ScreenHouse, Site, TrackingUnit,
+    Accession, Batch, Bench, Crop, MovementHistory, Position, ScreenHouse, Site, TrackingUnit,
 )
 
 
@@ -415,3 +415,74 @@ class TrackingUnitAutoArchiveTest(TestCase):
         unit.refresh_from_db()
         self.assertIsNotNone(unit.archived_at)
         self.assertGreaterEqual(unit.archived_at, before)
+
+
+# ── MovementHistory ────────────────────────────────────────────────────────────
+
+class MovementHistoryModelTest(TestCase):
+
+    def setUp(self):
+        self.unit = TrackingUnit.objects.create(
+            unit_code='TU-MOVE-001',
+            unit_type=TrackingUnit.UNIT_TYPE_CONTAINER,
+            crop_name='Move Test Crop',
+            quantity=5,
+            location_text='Bay A',
+        )
+        site = Site.objects.create(name='Move Site')
+        sh = ScreenHouse.objects.create(site=site, name='SH1')
+        bench = Bench.objects.create(screen_house=sh, name='Bench A')
+        self.position = Position.objects.create(bench=bench, code='P1')
+
+    def test_can_create_movement_with_free_text_locations(self):
+        movement = MovementHistory.objects.create(
+            tracking_unit=self.unit,
+            from_location_text='Bay A',
+            to_location_text='Bay B',
+            reason='Routine relocation',
+        )
+        self.assertEqual(movement.from_location_text, 'Bay A')
+        self.assertEqual(movement.to_location_text, 'Bay B')
+
+    def test_can_create_movement_with_structured_position(self):
+        movement = MovementHistory.objects.create(
+            tracking_unit=self.unit,
+            to_position=self.position,
+        )
+        self.assertEqual(movement.to_position, self.position)
+
+    def test_from_display_prefers_structured_position(self):
+        movement = MovementHistory.objects.create(
+            tracking_unit=self.unit,
+            from_position=self.position,
+            from_location_text='Bay A',
+        )
+        self.assertEqual(movement.from_display, str(self.position))
+
+    def test_from_display_falls_back_to_free_text(self):
+        movement = MovementHistory.objects.create(
+            tracking_unit=self.unit,
+            from_location_text='Bay A',
+        )
+        self.assertEqual(movement.from_display, 'Bay A')
+
+    def test_from_display_falls_back_to_dash_when_empty(self):
+        movement = MovementHistory.objects.create(tracking_unit=self.unit)
+        self.assertEqual(movement.from_display, '—')
+
+    def test_movement_is_immutable(self):
+        movement = MovementHistory.objects.create(
+            tracking_unit=self.unit,
+            to_location_text='Bay B',
+        )
+        movement.reason = 'Changed my mind'
+        with self.assertRaises(ValidationError):
+            movement.save()
+
+    def test_str_representation(self):
+        movement = MovementHistory.objects.create(
+            tracking_unit=self.unit,
+            from_location_text='Bay A',
+            to_location_text='Bay B',
+        )
+        self.assertIn(self.unit.unit_code, str(movement))

@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Move — {{ unit.unit_code }}{% endblock %}
+
+{% block extra_style %}
+.move-unit-banner {
+  background: #e3f2fd;
+  border-left: 4px solid #1565c0;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  border-radius: 0 4px 4px 0;
+}
+.move-unit-banner h2 { margin: 0 0 0.25rem; font-size: 1.2rem; }
+.move-unit-meta { font-size: 0.85rem; color: #555; margin: 0; }
+.move-form-section {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+.move-form-section h3 {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #555;
+}
+.form-group { margin-bottom: 0.9rem; }
+.form-group label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+.form-group select,
+.form-group input[type=text],
+.form-group textarea {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+  box-sizing: border-box;
+  background: #fff;
+}
+.form-group .errorlist {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0;
+  color: #c62828;
+  font-size: 0.85rem;
+}
+.form-hint { font-size: 0.8rem; color: #777; margin-top: 0.25rem; }
+.move-submit-btn {
+  display: block;
+  width: 100%;
+  padding: 0.9rem;
+  background: #1565c0;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 1rem;
+  letter-spacing: 0.03em;
+}
+.move-submit-btn:hover { background: #0d47a1; }
+.back-link { margin-top: 1rem; text-align: center; font-size: 0.85rem; }
+.back-link a { color: #2e7d32; }
+{% endblock %}
+
+{% block content %}
+<div class="move-unit-banner">
+  <h2>Move — {{ unit.unit_code }}</h2>
+  <p class="move-unit-meta">
+    {{ unit.display_crop }}
+    · Current location: {{ unit.display_location|default:"—" }}
+  </p>
+</div>
+
+<form method="post" novalidate>
+  {% csrf_token %}
+
+  {% if form.non_field_errors %}
+  <ul class="errorlist">{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  {% endif %}
+
+  <div class="move-form-section">
+    <h3>New location</h3>
+    <div class="form-group">
+      <label for="{{ form.to_position.id_for_label }}">{{ form.to_position.label }}</label>
+      {{ form.to_position }}
+      {% if form.to_position.errors %}
+      <ul class="errorlist">{% for e in form.to_position.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      <label for="{{ form.to_location_text.id_for_label }}">{{ form.to_location_text.label }}</label>
+      {{ form.to_location_text }}
+      <p class="form-hint">Use this if the destination doesn't have a structured position yet.</p>
+      {% if form.to_location_text.errors %}
+      <ul class="errorlist">{% for e in form.to_location_text.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      <label for="{{ form.reason.id_for_label }}">{{ form.reason.label }}</label>
+      {{ form.reason }}
+    </div>
+  </div>
+
+  <button type="submit" class="move-submit-btn">Move unit</button>
+</form>
+
+<div class="back-link">
+  <a href="{% url 'observe_timeline' unit_code=unit.unit_code %}">Cancel — back to timeline</a>
+</div>
+{% endblock %}

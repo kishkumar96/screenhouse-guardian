@@ -279,3 +279,59 @@ class TrackingUnit(models.Model):
     @property
     def archive_reason_display(self):
         return self._ARCHIVE_REASON_LABELS.get(self.archive_reason, self.archive_reason)
+
+
+class MovementHistory(models.Model):
+
+    tracking_unit = models.ForeignKey(
+        TrackingUnit,
+        on_delete=models.CASCADE,
+        related_name='movements',
+    )
+    from_position = models.ForeignKey(
+        Position,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='movements_from',
+    )
+    to_position = models.ForeignKey(
+        Position,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='movements_to',
+    )
+    from_location_text = models.CharField(max_length=255, blank=True)
+    to_location_text = models.CharField(max_length=255, blank=True)
+    reason = models.TextField(blank=True)
+    moved_at = models.DateTimeField(auto_now_add=True)
+    moved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='recorded_movements',
+    )
+
+    class Meta:
+        ordering = ['-moved_at']
+
+    def __str__(self):
+        return f'{self.tracking_unit.unit_code}: {self.from_display} → {self.to_display}'
+
+    @property
+    def from_display(self):
+        if self.from_position_id:
+            return str(self.from_position)
+        return self.from_location_text or '—'
+
+    @property
+    def to_display(self):
+        if self.to_position_id:
+            return str(self.to_position)
+        return self.to_location_text or '—'
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError(
+                'Movement history records are immutable.'
+            )
+        super().save(*args, **kwargs)

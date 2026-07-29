@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Accession, Batch, Crop
+from .models import Accession, Batch, Crop, Position
 
 ARCHIVE_REASON_CHOICES = [
     ('dead', 'Dead'),
@@ -67,3 +67,41 @@ class ArchiveTrackingUnitForm(forms.Form):
         required=True,
         error_messages={'required': 'You must check this box to confirm the archive.'},
     )
+
+
+class MoveTrackingUnitForm(forms.Form):
+    to_position = forms.ModelChoiceField(
+        queryset=Position.objects.none(),
+        required=False,
+        label='New position (structured)',
+        empty_label='— No structured position —',
+    )
+    to_location_text = forms.CharField(
+        max_length=255,
+        required=False,
+        label='New location (free text)',
+    )
+    reason = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 2}),
+        required=False,
+        label='Reason for move',
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['to_position'].queryset = (
+            Position.objects.filter(is_active=True)
+            .select_related('bench__screen_house__site')
+            .order_by('bench__screen_house__site__name', 'bench__screen_house__name', 'bench__name', 'code')
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+        to_position = cleaned.get('to_position')
+        to_location_text = cleaned.get('to_location_text', '').strip()
+        if not to_position and not to_location_text:
+            raise forms.ValidationError(
+                'Select a structured position or enter a free-text location.'
+            )
+        cleaned['to_location_text'] = to_location_text
+        return cleaned

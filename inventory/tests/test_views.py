@@ -3,7 +3,7 @@ from django.contrib.auth.models import Group
 from django.test import TestCase
 from django.utils import timezone
 
-from inventory.models import Accession, Batch, Crop, TrackingUnit
+from inventory.models import Accession, Batch, Bench, Crop, Position, ScreenHouse, Site, TrackingUnit
 
 PASSWORD = 'testpass123'
 
@@ -494,3 +494,98 @@ class ArchivedUnitsListContentTest(TestCase):
         TrackingUnit.objects.filter(pk=unit.pk).update(archived_at=timezone.now())
         response = self.client.get('/inventory/archived-units/')
         self.assertContains(response, f'/observe/{unit.unit_code}/timeline/')
+
+
+def make_position(code='P1'):
+    site = Site.objects.create(name=f'Move View Site {code}')
+    sh = ScreenHouse.objects.create(site=site, name='SH1')
+    bench = Bench.objects.create(screen_house=sh, name='Bench A')
+    return Position.objects.create(bench=bench, code=code)
+
+
+# ── /inventory/units/<unit_code>/move/ — access ─────────────────────────────
+
+class MoveUnitAccessTest(TestCase):
+
+    def setUp(self):
+        self.observer = make_observer('move_obs')
+        self.manager = make_manager('move_mgr')
+        self.unit = make_unit('TU-MOVE-ACC-001')
+
+    def test_anonymous_redirects_to_login(self):
+        response = self.client.get(f'/inventory/units/{self.unit.unit_code}/move/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+    def test_observer_gets_403(self):
+        self.client.login(username='move_obs', password=PASSWORD)
+        response = self.client.get(f'/inventory/units/{self.unit.unit_code}/move/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_gets_200(self):
+        self.client.login(username='move_mgr', password=PASSWORD)
+        response = self.client.get(f'/inventory/units/{self.unit.unit_code}/move/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_missing_unit_returns_404(self):
+        self.client.login(username='move_mgr', password=PASSWORD)
+        response = self.client.get('/inventory/units/NO-SUCH-UNIT/move/')
+        self.assertEqual(response.status_code, 404)
+
+    def test_archived_unit_redirects(self):
+        archived = make_unit('TU-MOVE-ARCH-001', is_active=False)
+        self.client.login(username='move_mgr', password=PASSWORD)
+        response = self.client.get(f'/inventory/units/{archived.unit_code}/move/')
+        self.assertEqual(response.status_code, 302)
+
+
+# ── /inventory/units/<unit_code>/move/ — POST behaviour ─────────────────────
+
+class MoveUnitPostTest(TestCase):
+
+    def setUp(self):
+        make_manager('move_post_mgr')
+        self.client.login(username='move_post_mgr', password=PASSWORD)
+        self.unit = make_unit('TU-MOVE-POST-001', location_text='Bay A')
+
+    def test_valid_free_text_move_updates_unit(self):
+        self.client.post(
+            f'/inventory/units/{self.unit.unit_code}/move/',
+            {'to_location_text': 'Bay B', 'reason': 'Better light'},
+        )
+        self.unit.refresh_from_db()
+        self.assertEqual(self.unit.location_text, 'Bay B')
+
+    def test_valid_structured_move_updates_unit(self):
+        position = make_position('P-POST-1')
+        self.client.post(
+            f'/inventory/units/{self.unit.unit_code}/move/',
+            {'to_position': position.pk, 'reason': 'Consolidating'},
+        )
+        self.unit.refresh_from_db()
+        self.assertEqual(self.unit.position_id, position.pk)
+
+    def test_move_without_destination_shows_error(self):
+        response = self.client.post(
+            f'/inventory/units/{self.unit.unit_code}/move/',
+            {'reason': 'No destination'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.unit.refresh_from_db()
+        self.assertEqual(self.unit.location_text, 'Bay A')
+
+    def test_valid_move_redirects_to_timeline(self):
+        response = self.client.post(
+            f'/inventory/units/{self.unit.unit_code}/move/',
+            {'to_location_text': 'Bay B'},
+        )
+        self.assertRedirects(response, f'/observe/{self.unit.unit_code}/timeline/')
+
+    def test_observer_cannot_post(self):
+        make_observer('move_post_obs')
+        self.client.login(username='move_post_obs', password=PASSWORD)
+        response = self.client.post(
+            f'/inventory/units/{self.unit.unit_code}/move/',
+            {'to_location_text': 'Bay B'},
+        )
+        self.assertEqual(response.status_code, 403)

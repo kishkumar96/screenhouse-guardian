@@ -177,11 +177,21 @@ def timeline(request, unit_code):
         .select_related('created_by', 'related_observation')
         .order_by('-treatment_date')
     )
+    movements = (
+        unit.movements
+        .select_related(
+            'moved_by',
+            'from_position__bench__screen_house__site',
+            'to_position__bench__screen_house__site',
+        )
+        .order_by('-moved_at')
+    )
     return render(request, 'monitoring/timeline.html', {
         'unit': unit,
         'observations': observations,
         'quantity_events': quantity_events,
         'treatments': treatments,
+        'movements': movements,
         'show_manager_links': is_manager(request.user),
     })
 

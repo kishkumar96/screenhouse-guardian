@@ -5,8 +5,9 @@ from django.utils import timezone
 
 from config.permissions import is_manager, manager_required, observer_required
 
-from .forms import AccessionForm, ArchiveTrackingUnitForm, BatchForm, CropForm
+from .forms import AccessionForm, ArchiveTrackingUnitForm, BatchForm, CropForm, MoveTrackingUnitForm
 from .models import Accession, Batch, Crop, TrackingUnit
+from .services import record_movement
 
 
 @observer_required
@@ -159,4 +160,33 @@ def archived_tracking_units(request):
     )
     return render(request, 'inventory/archived_units.html', {
         'units': units,
+    })
+
+
+@manager_required
+def move_tracking_unit(request, unit_code):
+    unit = _get_unit_for_archive(unit_code)
+
+    if not unit.is_active:
+        messages.error(request, f'Unit {unit.unit_code} is archived and cannot be moved.')
+        return redirect('observe_timeline', unit_code=unit_code)
+
+    if request.method == 'POST':
+        form = MoveTrackingUnitForm(request.POST)
+        if form.is_valid():
+            record_movement(
+                tracking_unit=unit,
+                to_position=form.cleaned_data['to_position'],
+                to_location_text=form.cleaned_data['to_location_text'],
+                user=request.user,
+                reason=form.cleaned_data['reason'],
+            )
+            messages.success(request, f'Unit {unit.unit_code} has been moved.')
+            return redirect('observe_timeline', unit_code=unit_code)
+    else:
+        form = MoveTrackingUnitForm()
+
+    return render(request, 'inventory/move_tracking_unit.html', {
+        'unit': unit,
+        'form': form,
     })

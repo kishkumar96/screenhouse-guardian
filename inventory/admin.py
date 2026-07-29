@@ -3,7 +3,7 @@ from django.urls import reverse
 from django.utils.html import format_html
 
 from .models import (
-    Accession, Batch, Bench, Crop, Position, ScreenHouse, Site, TrackingUnit,
+    Accession, Batch, Bench, Crop, MovementHistory, Position, ScreenHouse, Site, TrackingUnit,
 )
 
 
@@ -46,6 +46,15 @@ class BatchAdmin(admin.ModelAdmin):
         if obj.created_by_id is None and request.user.is_authenticated:
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(MovementHistory)
+class MovementHistoryAdmin(admin.ModelAdmin):
+    list_display = ['tracking_unit', 'from_display', 'to_display', 'moved_at', 'moved_by']
+    list_filter = ['moved_at']
+    search_fields = ['tracking_unit__unit_code', 'from_location_text', 'to_location_text']
+    raw_id_fields = ['tracking_unit', 'from_position', 'to_position']
+    readonly_fields = ['moved_at']
 
 
 @admin.register(Site)
