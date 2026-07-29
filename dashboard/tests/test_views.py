@@ -429,3 +429,20 @@ class DashboardRoundSummaryTest(TestCase):
         dr = make_daily_round(name='Visible round')
         response = self.client.get('/dashboard/')
         self.assertContains(response, f'/monitoring/rounds/{dr.pk}/')
+
+
+# ── Dashboard Follow-ups link tests ───────────────────────────────────────────
+
+class DashboardFollowUpLinkTest(TestCase):
+
+    def test_dashboard_includes_follow_ups_link_for_observer(self):
+        obs = make_observer(username='dash_fu_link_obs')
+        self.client.login(username='dash_fu_link_obs', password=_PASSWORD)
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, '/monitoring/follow-ups/')
+
+    def test_dashboard_includes_follow_ups_link_for_manager(self):
+        mgr = make_manager(username='dash_fu_link_mgr')
+        self.client.login(username='dash_fu_link_mgr', password=_PASSWORD)
+        response = self.client.get('/dashboard/')
+        self.assertContains(response, '/monitoring/follow-ups/')

@@ -1,11 +1,11 @@
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.db.models import OuterRef, Subquery
+from django.db.models import OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from config.permissions import is_manager, manager_required, observer_required
-from inventory.models import TrackingUnit
+from inventory.models import Crop, TrackingUnit
 from .forms import (
     DailyRoundCreateForm,
     DailyRoundEditForm,
@@ -372,4 +372,97 @@ def round_edit(request, round_id):
     return render(request, 'monitoring/round_edit.html', {
         'daily_round': daily_round,
         'form': form,
+    })
+
+
+# ── Follow-up list ─────────────────────────────────────────────────────────────
+
+_COMPLETED_OUTCOMES = {
+    Treatment.OUTCOME_IMPROVED,
+    Treatment.OUTCOME_NO_CHANGE,
+    Treatment.OUTCOME_WORSENED,
+    Treatment.OUTCOME_RESOLVED,
+}
+
+STATUS_PENDING = 'pending'
+STATUS_DUE_TODAY = 'due_today'
+STATUS_OVERDUE = 'overdue'
+STATUS_COMPLETED = 'completed'
+STATUS_ALL = 'all'
+
+
+@observer_required
+def follow_up_list(request):
+    today = timezone.localdate()
+
+    # Base: treatments that have a follow_up_date set
+    base_qs = (
+        Treatment.objects
+        .filter(follow_up_date__isnull=False)
+        .select_related(
+            'tracking_unit__crop',
+            'tracking_unit__accession',
+            'tracking_unit__position__bench__screen_house__site',
+            'created_by',
+        )
+    )
+
+    # Summary counts (always over all treatments with follow_up_date)
+    counts = {
+        'pending': base_qs.filter(outcome=Treatment.OUTCOME_PENDING).count(),
+        'due_today': base_qs.filter(follow_up_date=today, outcome=Treatment.OUTCOME_PENDING).count(),
+        'overdue': base_qs.filter(follow_up_date__lt=today, outcome=Treatment.OUTCOME_PENDING).count(),
+        'completed': base_qs.filter(outcome__in=list(_COMPLETED_OUTCOMES)).count(),
+    }
+
+    # Apply status filter
+    status_filter = request.GET.get('status', STATUS_PENDING)
+    if status_filter == STATUS_DUE_TODAY:
+        qs = base_qs.filter(follow_up_date=today, outcome=Treatment.OUTCOME_PENDING)
+    elif status_filter == STATUS_OVERDUE:
+        qs = base_qs.filter(follow_up_date__lt=today, outcome=Treatment.OUTCOME_PENDING)
+    elif status_filter == STATUS_COMPLETED:
+        qs = base_qs.filter(outcome__in=list(_COMPLETED_OUTCOMES))
+    elif status_filter == STATUS_ALL:
+        qs = base_qs
+    else:  # default = pending
+        status_filter = STATUS_PENDING
+        qs = base_qs.filter(outcome=Treatment.OUTCOME_PENDING)
+
+    # Apply treatment_type filter
+    treatment_type = request.GET.get('treatment_type', '')
+    if treatment_type:
+        qs = qs.filter(treatment_type=treatment_type)
+
+    # Apply location text filter (legacy + structured)
+    location = request.GET.get('location', '').strip()
+    if location:
+        qs = qs.filter(
+            Q(tracking_unit__location_text__icontains=location) |
+            Q(tracking_unit__position__bench__name__icontains=location) |
+            Q(tracking_unit__position__bench__screen_house__name__icontains=location) |
+            Q(tracking_unit__position__bench__screen_house__site__name__icontains=location)
+        )
+
+    # Apply crop filter (by name, case-insensitive substring)
+    crop = request.GET.get('crop', '').strip()
+    if crop:
+        qs = qs.filter(
+            Q(tracking_unit__crop_name__icontains=crop) |
+            Q(tracking_unit__crop__name__icontains=crop)
+        )
+
+    # Order: overdue first, then by date, then by unit code
+    qs = qs.order_by('follow_up_date', 'tracking_unit__unit_code')
+
+    return render(request, 'monitoring/follow_up_list.html', {
+        'treatments': qs,
+        'counts': counts,
+        'status_filter': status_filter,
+        'treatment_type_filter': treatment_type,
+        'location_filter': location,
+        'crop_filter': crop,
+        'treatment_type_choices': Treatment.TYPE_CHOICES,
+        'today': today,
+        'show_manager_links': is_manager(request.user),
     })

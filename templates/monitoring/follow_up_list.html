@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block title %}Follow-up Management — Screen House Guardian{% endblock %}
+
+{% block extra_style %}
+.fu-heading { margin-bottom: 1.25rem; }
+.fu-heading h2 { margin: 0 0 0.25rem; font-size: 1.4rem; }
+.fu-heading p  { margin: 0; color: #666; font-size: 0.9rem; }
+
+/* Summary count cards */
+.fu-count-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1.5rem;
+}
+.fu-count-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 0.75rem 1.1rem;
+  min-width: 110px;
+  flex: 1;
+  text-decoration: none;
+  display: block;
+  transition: box-shadow 0.1s;
+}
+.fu-count-card:hover { box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+.fu-count-card.active { border-color: #2e7d32; box-shadow: 0 0 0 2px #a5d6a7; }
+.fu-count-value { font-size: 1.8rem; font-weight: 700; color: #2e7d32; line-height: 1.1; }
+.fu-count-card.warn  .fu-count-value { color: #e65100; }
+.fu-count-card.alert .fu-count-value { color: #b71c1c; }
+.fu-count-card.done  .fu-count-value { color: #555; }
+.fu-count-label { font-size: 0.72rem; color: #666; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.15rem; }
+
+/* Filter bar */
+.fu-filters {
+  background: #f9fbe7;
+  border: 1px solid #e6ee9c;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: flex-end;
+}
+.fu-filter-group { display: flex; flex-direction: column; gap: 0.2rem; }
+.fu-filter-group label { font-size: 0.78rem; font-weight: 600; color: #555; }
+.fu-filter-group select,
+.fu-filter-group input[type=text] {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  background: #fff;
+  min-width: 140px;
+}
+.fu-filter-btn {
+  padding: 0.4rem 1rem;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-end;
+}
+.fu-filter-btn:hover { background: #1b5e20; }
+.fu-filter-clear { font-size: 0.8rem; color: #555; text-decoration: none; align-self: flex-end; }
+.fu-filter-clear:hover { text-decoration: underline; }
+
+/* Table */
+.fu-table-wrap { overflow-x: auto; }
+.fu-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+.fu-table th {
+  background: #f1f8e9;
+  color: #2e7d32;
+  text-align: left;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border-bottom: 1px solid #ddd;
+}
+.fu-table td {
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+.fu-table tr:last-child td { border-bottom: none; }
+.fu-table tr:hover td { background: #fafafa; }
+.fu-table tr.row-overdue td { background: #fff8f8; }
+.fu-table tr.row-due-today td { background: #fffde7; }
+
+.unit-code { font-family: monospace; font-size: 0.85rem; font-weight: 600; }
+
+.outcome-badge {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.outcome-pending   { background: #fff9c4; color: #f57f17; }
+.outcome-improved  { background: #c8e6c9; color: #1b5e20; }
+.outcome-no_change { background: #eeeeee; color: #555; }
+.outcome-worsened  { background: #ffcdd2; color: #b71c1c; }
+.outcome-resolved  { background: #e1bee7; color: #4a148c; }
+
+.date-overdue { color: #b71c1c; font-weight: 700; }
+.date-due-today { color: #e65100; font-weight: 700; }
+
+.action-links a {
+  font-size: 0.78rem;
+  color: #2e7d32;
+  text-decoration: none;
+  border: 1px solid #a5d6a7;
+  border-radius: 3px;
+  padding: 0.15rem 0.45rem;
+  margin-right: 0.25rem;
+  white-space: nowrap;
+  display: inline-block;
+}
+.action-links a:hover { background: #e8f5e9; }
+.action-links a.update-link {
+  border-color: #f9a825;
+  color: #f57f17;
+}
+.action-links a.update-link:hover { background: #fff8e1; }
+
+.empty-state {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: #888;
+  font-size: 0.95rem;
+}
+{% endblock %}
+
+{% block content %}
+<div class="fu-heading">
+  <h2>Follow-up Management</h2>
+  <p>Treatments with scheduled follow-up checks.</p>
+</div>
+
+{# ── Summary counts ── #}
+<div class="fu-count-grid">
+  <a class="fu-count-card warn {% if status_filter == 'pending' %}active{% endif %}"
+     href="?status=pending{% if treatment_type_filter %}&treatment_type={{ treatment_type_filter }}{% endif %}{% if location_filter %}&location={{ location_filter }}{% endif %}{% if crop_filter %}&crop={{ crop_filter }}{% endif %}">
+    <div class="fu-count-value">{{ counts.pending }}</div>
+    <div class="fu-count-label">Pending</div>
+  </a>
+  <a class="fu-count-card warn {% if status_filter == 'due_today' %}active{% endif %}"
+     href="?status=due_today{% if treatment_type_filter %}&treatment_type={{ treatment_type_filter }}{% endif %}{% if location_filter %}&location={{ location_filter }}{% endif %}{% if crop_filter %}&crop={{ crop_filter }}{% endif %}">
+    <div class="fu-count-value">{{ counts.due_today }}</div>
+    <div class="fu-count-label">Due Today</div>
+  </a>
+  <a class="fu-count-card alert {% if status_filter == 'overdue' %}active{% endif %}"
+     href="?status=overdue{% if treatment_type_filter %}&treatment_type={{ treatment_type_filter }}{% endif %}{% if location_filter %}&location={{ location_filter }}{% endif %}{% if crop_filter %}&crop={{ crop_filter }}{% endif %}">
+    <div class="fu-count-value">{{ counts.overdue }}</div>
+    <div class="fu-count-label">Overdue</div>
+  </a>
+  <a class="fu-count-card done {% if status_filter == 'completed' %}active{% endif %}"
+     href="?status=completed{% if treatment_type_filter %}&treatment_type={{ treatment_type_filter }}{% endif %}{% if location_filter %}&location={{ location_filter }}{% endif %}{% if crop_filter %}&crop={{ crop_filter }}{% endif %}">
+    <div class="fu-count-value">{{ counts.completed }}</div>
+    <div class="fu-count-label">Completed</div>
+  </a>
+  <a class="fu-count-card {% if status_filter == 'all' %}active{% endif %}"
+     href="?status=all{% if treatment_type_filter %}&treatment_type={{ treatment_type_filter }}{% endif %}{% if location_filter %}&location={{ location_filter }}{% endif %}{% if crop_filter %}&crop={{ crop_filter }}{% endif %}">
+    <div class="fu-count-value" style="color:#555;">{{ counts.pending|add:counts.completed }}</div>
+    <div class="fu-count-label">All</div>
+  </a>
+</div>
+
+{# ── Filter bar ── #}
+<form class="fu-filters" method="get" novalidate>
+  <input type="hidden" name="status" value="{{ status_filter }}">
+
+  <div class="fu-filter-group">
+    <label for="id_treatment_type">Treatment type</label>
+    <select name="treatment_type" id="id_treatment_type">
+      <option value="">All types</option>
+      {% for value, label in treatment_type_choices %}
+      <option value="{{ value }}" {% if treatment_type_filter == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="fu-filter-group">
+    <label for="id_location">Location</label>
+    <input type="text" name="location" id="id_location"
+           value="{{ location_filter }}" placeholder="e.g. Bay 3">
+  </div>
+
+  <div class="fu-filter-group">
+    <label for="id_crop">Crop</label>
+    <input type="text" name="crop" id="id_crop"
+           value="{{ crop_filter }}" placeholder="e.g. Baobab">
+  </div>
+
+  <button type="submit" class="fu-filter-btn">Filter</button>
+  <a href="?status={{ status_filter }}" class="fu-filter-clear">Clear filters</a>
+</form>
+
+{# ── Results table ── #}
+{% if treatments %}
+<div class="fu-table-wrap">
+  <table class="fu-table">
+    <thead>
+      <tr>
+        <th>Unit</th>
+        <th>Crop</th>
+        <th>Accession</th>
+        <th>Location</th>
+        <th>Treatment</th>
+        <th>Treated</th>
+        <th>Follow-up date</th>
+        <th>Outcome</th>
+        <th>Reason</th>
+        <th>Product</th>
+        <th>By</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for tx in treatments %}
+      {% if tx.follow_up_date < today and tx.outcome == 'pending' %}
+      <tr class="row-overdue">
+      {% elif tx.follow_up_date == today and tx.outcome == 'pending' %}
+      <tr class="row-due-today">
+      {% else %}
+      <tr>
+      {% endif %}
+        <td class="unit-code">{{ tx.tracking_unit.unit_code }}</td>
+        <td>{{ tx.tracking_unit.display_crop }}</td>
+        <td>{{ tx.tracking_unit.display_accession|default:"—" }}</td>
+        <td>{{ tx.tracking_unit.display_location|default:"—" }}</td>
+        <td>{{ tx.get_treatment_type_display }}</td>
+        <td>{{ tx.treatment_date|date:"d M Y" }}</td>
+        <td>
+          {% if tx.follow_up_date < today and tx.outcome == 'pending' %}
+          <span class="date-overdue">{{ tx.follow_up_date|date:"d M Y" }}</span>
+          {% elif tx.follow_up_date == today and tx.outcome == 'pending' %}
+          <span class="date-due-today">{{ tx.follow_up_date|date:"d M Y" }}</span>
+          {% else %}
+          {{ tx.follow_up_date|date:"d M Y" }}
+          {% endif %}
+        </td>
+        <td><span class="outcome-badge outcome-{{ tx.outcome }}">{{ tx.get_outcome_display }}</span></td>
+        <td>{{ tx.reason|truncatechars:60 }}</td>
+        <td>{{ tx.product_used|default:"—" }}</td>
+        <td>{% if tx.created_by %}{{ tx.created_by.get_full_name|default:tx.created_by.username }}{% else %}—{% endif %}</td>
+        <td class="action-links">
+          <a href="{% url 'observe_timeline' unit_code=tx.tracking_unit.unit_code %}">Timeline</a>
+          {% if tx.tracking_unit.is_active %}
+          <a href="{% url 'observe' unit_code=tx.tracking_unit.unit_code %}">Observe</a>
+          {% endif %}
+          {% if show_manager_links %}
+          <a class="update-link" href="{% url 'monitoring:update_treatment_outcome' treatment_id=tx.pk %}">Update outcome</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">
+  <p>No follow-ups match the current filter.</p>
+  <a href="?status=all">Show all follow-ups</a>
+</div>
+{% endif %}
+{% endblock %}

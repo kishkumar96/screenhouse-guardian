@@ -13,4 +13,6 @@ urlpatterns = [
     path('rounds/new/', views.round_create, name='round_create'),
     path('rounds/<int:round_id>/', views.round_detail, name='round_detail'),
     path('rounds/<int:round_id>/edit/', views.round_edit, name='round_edit'),
+    # Follow-up management
+    path('follow-ups/', views.follow_up_list, name='follow_up_list'),
 ]

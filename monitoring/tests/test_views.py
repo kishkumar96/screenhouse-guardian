@@ -1489,3 +1489,267 @@ class RoundListMissedAutomationTest(TestCase):
         self.client.get('/monitoring/rounds/')
         dr.refresh_from_db()
         self.assertEqual(dr.status, DailyRound.STATUS_PLANNED)
+
+
+# ── Follow-up list view tests ─────────────────────────────────────────────────
+
+import datetime as _dt
+from monitoring.models import Treatment
+
+
+def _make_treatment_with_followup(unit, follow_up_date=None, outcome=Treatment.OUTCOME_PENDING,
+                                  treatment_type=Treatment.TYPE_FUNGICIDE, **kwargs):
+    if follow_up_date is None:
+        follow_up_date = _dt.date.today()
+    return Treatment.objects.create(
+        tracking_unit=unit,
+        treatment_type=treatment_type,
+        reason='Test treatment',
+        follow_up_date=follow_up_date,
+        outcome=outcome,
+        **kwargs,
+    )
+
+
+def _make_treatment_no_followup(unit, **kwargs):
+    return Treatment.objects.create(
+        tracking_unit=unit,
+        treatment_type=Treatment.TYPE_WATERED,
+        reason='No follow-up',
+        **kwargs,
+    )
+
+
+class FollowUpListAccessTest(TestCase):
+
+    def test_anonymous_redirects_to_login(self):
+        response = self.client.get('/monitoring/follow-ups/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+    def test_observer_can_access(self):
+        obs = make_observer(username='fu_obs_access')
+        self.client.login(username='fu_obs_access', password=_PASSWORD)
+        response = self.client.get('/monitoring/follow-ups/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_manager_can_access(self):
+        mgr = make_manager(username='fu_mgr_access')
+        self.client.login(username='fu_mgr_access', password=_PASSWORD)
+        response = self.client.get('/monitoring/follow-ups/')
+        self.assertEqual(response.status_code, 200)
+
+
+class FollowUpListFilterTest(TestCase):
+
+    def setUp(self):
+        self.obs_user = make_observer(username='fu_obs_filter')
+        self.client.login(username='fu_obs_filter', password=_PASSWORD)
+        self.unit = make_unit('TU-FU-FILTER-001', quantity=5)
+
+        today = _dt.date.today()
+        self.past = today - _dt.timedelta(days=3)
+        self.future = today + _dt.timedelta(days=7)
+
+        self.overdue_tx = _make_treatment_with_followup(
+            self.unit, follow_up_date=self.past, outcome=Treatment.OUTCOME_PENDING
+        )
+        self.due_today_tx = _make_treatment_with_followup(
+            make_unit('TU-FU-FILTER-002', quantity=5),
+            follow_up_date=today, outcome=Treatment.OUTCOME_PENDING
+        )
+        self.future_tx = _make_treatment_with_followup(
+            make_unit('TU-FU-FILTER-003', quantity=5),
+            follow_up_date=self.future, outcome=Treatment.OUTCOME_PENDING
+        )
+        self.resolved_tx = _make_treatment_with_followup(
+            make_unit('TU-FU-FILTER-004', quantity=5),
+            follow_up_date=self.past, outcome=Treatment.OUTCOME_RESOLVED
+        )
+        self.no_followup_tx = _make_treatment_no_followup(
+            make_unit('TU-FU-FILTER-005', quantity=5)
+        )
+
+    def test_only_treatments_with_follow_up_date_shown(self):
+        response = self.client.get('/monitoring/follow-ups/?status=all')
+        treatment_pks = {tx.pk for tx in response.context['treatments']}
+        self.assertNotIn(self.no_followup_tx.pk, treatment_pks)
+
+    def test_default_filter_shows_pending(self):
+        response = self.client.get('/monitoring/follow-ups/')
+        treatment_pks = {tx.pk for tx in response.context['treatments']}
+        self.assertIn(self.overdue_tx.pk, treatment_pks)
+        self.assertIn(self.due_today_tx.pk, treatment_pks)
+        self.assertIn(self.future_tx.pk, treatment_pks)
+
+    def test_default_filter_hides_resolved(self):
+        response = self.client.get('/monitoring/follow-ups/')
+        treatment_pks = {tx.pk for tx in response.context['treatments']}
+        self.assertNotIn(self.resolved_tx.pk, treatment_pks)
+
+    def test_status_all_shows_resolved(self):
+        response = self.client.get('/monitoring/follow-ups/?status=all')
+        treatment_pks = {tx.pk for tx in response.context['treatments']}
+        self.assertIn(self.resolved_tx.pk, treatment_pks)
+
+    def test_status_due_today_shows_only_due_today(self):
+        response = self.client.get('/monitoring/follow-ups/?status=due_today')
+        treatment_pks = {tx.pk for tx in response.context['treatments']}
+        self.assertIn(self.due_today_tx.pk, treatment_pks)
+        self.assertNotIn(self.overdue_tx.pk, treatment_pks)
+        self.assertNotIn(self.future_tx.pk, treatment_pks)
+
+    def test_status_overdue_shows_only_overdue_pending(self):
+        response = self.client.get('/monitoring/follow-ups/?status=overdue')
+        treatment_pks = {tx.pk for tx in response.context['treatments']}
+        self.assertIn(self.overdue_tx.pk, treatment_pks)
+        self.assertNotIn(self.due_today_tx.pk, treatment_pks)
+        self.assertNotIn(self.future_tx.pk, treatment_pks)
+        self.assertNotIn(self.resolved_tx.pk, treatment_pks)
+
+    def test_status_completed_shows_improved_no_change_worsened_resolved(self):
+        unit2 = make_unit('TU-FU-COMP-001', quantity=5)
+        improved_tx = _make_treatment_with_followup(unit2, outcome=Treatment.OUTCOME_IMPROVED)
+        response = self.client.get('/monitoring/follow-ups/?status=completed')
+        treatment_pks = {tx.pk for tx in response.context['treatments']}
+        self.assertIn(self.resolved_tx.pk, treatment_pks)
+        self.assertIn(improved_tx.pk, treatment_pks)
+        self.assertNotIn(self.overdue_tx.pk, treatment_pks)
+
+    def test_treatment_type_filter(self):
+        unit2 = make_unit('TU-FU-TYPE-001', quantity=5)
+        watered_tx = _make_treatment_with_followup(
+            unit2, treatment_type=Treatment.TYPE_WATERED
+        )
+        response = self.client.get(
+            '/monitoring/follow-ups/?status=pending&treatment_type=watered'
+        )
+        treatment_pks = {tx.pk for tx in response.context['treatments']}
+        self.assertIn(watered_tx.pk, treatment_pks)
+        self.assertNotIn(self.overdue_tx.pk, treatment_pks)
+
+    def test_location_filter(self):
+        unit_bay9 = make_unit('TU-FU-LOC-001', quantity=5, location_text='Bay 9')
+        tx_bay9 = _make_treatment_with_followup(unit_bay9)
+        response = self.client.get('/monitoring/follow-ups/?status=pending&location=Bay+9')
+        treatment_pks = {tx.pk for tx in response.context['treatments']}
+        self.assertIn(tx_bay9.pk, treatment_pks)
+        # Other units not in Bay 9 should be excluded
+        for pk in treatment_pks:
+            tx = Treatment.objects.get(pk=pk)
+            self.assertIn('Bay 9', tx.tracking_unit.location_text)
+
+    def test_crop_filter(self):
+        from inventory.models import Crop
+        crop_obj = Crop.objects.create(name='Baobab', scientific_name='Adansonia', created_by=None)
+        unit_crop = make_unit('TU-FU-CROP-001', quantity=5, crop_name='Baobab')
+        unit_crop.crop = crop_obj
+        unit_crop.save(update_fields=['crop'])
+        tx_baobab = _make_treatment_with_followup(unit_crop)
+        response = self.client.get('/monitoring/follow-ups/?status=pending&crop=baobab')
+        treatment_pks = {tx.pk for tx in response.context['treatments']}
+        self.assertIn(tx_baobab.pk, treatment_pks)
+
+
+class FollowUpSummaryCountsTest(TestCase):
+
+    def setUp(self):
+        self.obs_user = make_observer(username='fu_obs_counts')
+        self.client.login(username='fu_obs_counts', password=_PASSWORD)
+        self.unit = make_unit('TU-FU-COUNTS-001', quantity=5)
+        today = _dt.date.today()
+        past = today - _dt.timedelta(days=2)
+        future = today + _dt.timedelta(days=5)
+
+        _make_treatment_with_followup(
+            make_unit('TU-FU-C1', quantity=5), follow_up_date=past
+        )  # overdue pending
+        _make_treatment_with_followup(
+            make_unit('TU-FU-C2', quantity=5), follow_up_date=today
+        )  # due today pending
+        _make_treatment_with_followup(
+            make_unit('TU-FU-C3', quantity=5), follow_up_date=future
+        )  # future pending
+        _make_treatment_with_followup(
+            make_unit('TU-FU-C4', quantity=5),
+            follow_up_date=past, outcome=Treatment.OUTCOME_RESOLVED
+        )  # completed
+
+    def test_summary_counts_in_context(self):
+        response = self.client.get('/monitoring/follow-ups/')
+        counts = response.context['counts']
+        self.assertEqual(counts['pending'], 3)
+        self.assertEqual(counts['due_today'], 1)
+        self.assertEqual(counts['overdue'], 1)
+        self.assertEqual(counts['completed'], 1)
+
+
+class FollowUpListContentTest(TestCase):
+
+    def setUp(self):
+        self.mgr = make_manager(username='fu_mgr_content')
+        self.obs = make_observer(username='fu_obs_content')
+        self.unit = make_unit('TU-FU-CONTENT-001', crop_name='Cassava',
+                               location_text='Bay 2', quantity=10)
+        today = _dt.date.today()
+        self.tx = _make_treatment_with_followup(
+            self.unit,
+            follow_up_date=today + _dt.timedelta(days=3),
+            treatment_type=Treatment.TYPE_FUNGICIDE,
+        )
+
+    def test_row_shows_unit_code(self):
+        self.client.login(username='fu_obs_content', password=_PASSWORD)
+        response = self.client.get('/monitoring/follow-ups/')
+        self.assertContains(response, self.unit.unit_code)
+
+    def test_row_shows_crop(self):
+        self.client.login(username='fu_obs_content', password=_PASSWORD)
+        response = self.client.get('/monitoring/follow-ups/')
+        self.assertContains(response, 'Cassava')
+
+    def test_row_shows_location(self):
+        self.client.login(username='fu_obs_content', password=_PASSWORD)
+        response = self.client.get('/monitoring/follow-ups/')
+        self.assertContains(response, 'Bay 2')
+
+    def test_row_shows_treatment_type(self):
+        self.client.login(username='fu_obs_content', password=_PASSWORD)
+        response = self.client.get('/monitoring/follow-ups/')
+        self.assertContains(response, 'Fungicide')
+
+    def test_row_shows_follow_up_date(self):
+        self.client.login(username='fu_obs_content', password=_PASSWORD)
+        response = self.client.get('/monitoring/follow-ups/')
+        from django.utils.formats import date_format
+        self.assertContains(response, self.tx.follow_up_date.strftime('%-d %b %Y').lstrip('0'))
+
+    def test_row_shows_outcome_badge(self):
+        self.client.login(username='fu_obs_content', password=_PASSWORD)
+        response = self.client.get('/monitoring/follow-ups/')
+        self.assertContains(response, 'Pending')
+
+    def test_observer_sees_timeline_link(self):
+        self.client.login(username='fu_obs_content', password=_PASSWORD)
+        response = self.client.get('/monitoring/follow-ups/')
+        self.assertContains(response, f'/observe/{self.unit.unit_code}/timeline/')
+
+    def test_observer_sees_observe_link(self):
+        self.client.login(username='fu_obs_content', password=_PASSWORD)
+        response = self.client.get('/monitoring/follow-ups/')
+        self.assertContains(response, f'/observe/{self.unit.unit_code}/')
+
+    def test_observer_does_not_see_update_outcome_link(self):
+        self.client.login(username='fu_obs_content', password=_PASSWORD)
+        response = self.client.get('/monitoring/follow-ups/')
+        self.assertNotContains(response, f'/monitoring/treatments/{self.tx.pk}/outcome/')
+
+    def test_manager_sees_update_outcome_link(self):
+        self.client.login(username='fu_mgr_content', password=_PASSWORD)
+        response = self.client.get('/monitoring/follow-ups/')
+        self.assertContains(response, f'/monitoring/treatments/{self.tx.pk}/outcome/')
+
+    def test_empty_state_when_no_follow_ups_match(self):
+        self.client.login(username='fu_obs_content', password=_PASSWORD)
+        response = self.client.get('/monitoring/follow-ups/?status=due_today&treatment_type=insecticide')
+        self.assertContains(response, 'No follow-ups match')

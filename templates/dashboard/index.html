@@ -255,6 +255,7 @@
       <a href="{% url 'exports:index' %}" class="dash-action-btn">Export data</a>
     {% endif %}
     <a href="{% url 'monitoring:round_list' %}" class="dash-action-btn secondary">Daily rounds</a>
+    <a href="{% url 'monitoring:follow_up_list' %}" class="dash-action-btn secondary">Follow-ups</a>
     <a href="{% url 'inventory:archived_tracking_units' %}" class="dash-action-btn secondary">Archived units</a>
     {% if show_staff_links %}
       <a href="/admin/inventory/trackingunit/add/" class="dash-action-btn secondary">Create unit in admin</a>
