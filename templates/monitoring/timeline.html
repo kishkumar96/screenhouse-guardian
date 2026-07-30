@@ -223,6 +223,18 @@
 }
 .movement-reason { color: #555; font-style: italic; margin-top: 0.2rem; }
 .movement-meta { font-size: 0.8rem; color: #777; margin-top: 0.25rem; }
+.distribution-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-left: 3px solid #9575cd;
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.875rem;
+}
+.distribution-headline { font-size: 0.9rem; color: #333; }
+.distribution-purpose { color: #555; font-style: italic; margin-top: 0.2rem; }
+.distribution-meta { font-size: 0.8rem; color: #777; margin-top: 0.25rem; }
 {% endblock %}
 
 {% block content %}
@@ -253,6 +265,7 @@
   {% if show_manager_links %}
   <a href="{% url 'monitoring:create_quantity_event' unit_code=unit.unit_code %}" class="secondary">Record quantity change</a>
   <a href="{% url 'monitoring:create_treatment' unit_code=unit.unit_code %}" class="secondary" style="border-color:#f9a825;color:#f57f17;">Record treatment</a>
+  <a href="{% url 'monitoring:create_distribution' unit_code=unit.unit_code %}" class="secondary" style="border-color:#9575cd;color:#6a4ca0;">Record distribution</a>
   <a href="{% url 'inventory:move_tracking_unit' unit_code=unit.unit_code %}" class="secondary" style="border-color:#1565c0;color:#1565c0;">Move unit</a>
   <a href="{% url 'inventory:archive_tracking_unit' unit_code=unit.unit_code %}" class="secondary" style="border-color:#e65100;color:#e65100;">Archive unit</a>
   {% endif %}
@@ -293,6 +306,23 @@
   <p class="movement-meta">
     {{ move.moved_at|date:"d M Y, H:i" }}
     {% if move.moved_by %} &mdash; {{ move.moved_by.get_full_name|default:move.moved_by.username }}{% endif %}
+  </p>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if distributions %}
+<h3 class="section-heading" style="margin-top:1.75rem;">Distribution History</h3>
+{% for dist in distributions %}
+<div class="distribution-card">
+  <div class="distribution-headline">
+    {{ dist.quantity }} distributed to <strong>{{ dist.recipient_name }}</strong>
+    {% if dist.recipient_organisation %}({{ dist.recipient_organisation }}){% endif %}
+  </div>
+  {% if dist.purpose %}<p class="distribution-purpose">"{{ dist.purpose }}"</p>{% endif %}
+  <p class="distribution-meta">
+    {{ dist.distributed_at|date:"d M Y, H:i" }}
+    {% if dist.created_by %} &mdash; {{ dist.created_by.get_full_name|default:dist.created_by.username }}{% endif %}
   </p>
 </div>
 {% endfor %}

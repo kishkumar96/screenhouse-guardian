@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Record Distribution — {{ unit.unit_code }}{% endblock %}
+
+{% block extra_style %}
+.dx-unit-banner {
+  background: #e8f5e9;
+  border-left: 4px solid #2e7d32;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  border-radius: 0 4px 4px 0;
+}
+.dx-unit-banner h2 { margin: 0 0 0.2rem; font-size: 1.2rem; }
+.dx-unit-meta { font-size: 0.85rem; color: #555; margin: 0.15rem 0 0; }
+.dx-form-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+.form-group { margin-bottom: 1rem; }
+.form-group label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+.form-group textarea { resize: vertical; }
+.form-group .errorlist {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0;
+  color: #c62828;
+  font-size: 0.85rem;
+}
+.non-field-errors {
+  background: #fce4ec;
+  border: 1px solid #e91e63;
+  color: #880e4f;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+.submit-btn {
+  display: block;
+  width: 100%;
+  padding: 0.9rem;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 1rem;
+}
+.submit-btn:hover { background: #1b5e20; }
+.back-link {
+  display: inline-block;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: #555;
+  text-decoration: none;
+}
+.back-link:hover { text-decoration: underline; }
+.principle-note {
+  font-size: 0.82rem;
+  color: #666;
+  background: #f9fbe7;
+  border: 1px solid #e6ee9c;
+  border-radius: 4px;
+  padding: 0.55rem 0.85rem;
+  margin-bottom: 1rem;
+}
+{% endblock %}
+
+{% block content %}
+<div class="dx-unit-banner">
+  <h2>{{ unit.unit_code }} — {{ unit.display_crop }}</h2>
+  <p class="dx-unit-meta">
+    Qty {{ unit.quantity }}
+    {% if unit.display_location %} · {{ unit.display_location }}{% endif %}
+  </p>
+</div>
+
+<p class="principle-note">
+  Recording a distribution reduces this unit's quantity as a loss event and keeps
+  a record of who received it and why.
+</p>
+
+{% if form.non_field_errors %}
+<div class="non-field-errors">
+  {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+</div>
+{% endif %}
+
+<form method="post" novalidate>
+  {% csrf_token %}
+
+  <div class="dx-form-card">
+    <div class="form-group">
+      <label for="{{ form.quantity.id_for_label }}">Quantity distributed *</label>
+      {{ form.quantity }}
+      {% if form.quantity.errors %}
+      <ul class="errorlist">{% for e in form.quantity.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+
+    <div class="form-group">
+      <label for="{{ form.recipient_name.id_for_label }}">Recipient name *</label>
+      {{ form.recipient_name }}
+      {% if form.recipient_name.errors %}
+      <ul class="errorlist">{% for e in form.recipient_name.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+
+    <div class="form-group">
+      <label for="{{ form.recipient_organisation.id_for_label }}">Recipient organisation</label>
+      {{ form.recipient_organisation }}
+    </div>
+
+    <div class="form-group">
+      <label for="{{ form.purpose.id_for_label }}">Purpose</label>
+      {{ form.purpose }}
+    </div>
+
+    <div class="form-group">
+      <label for="{{ form.notes.id_for_label }}">Notes</label>
+      {{ form.notes }}
+    </div>
+  </div>
+
+  <button type="submit" class="submit-btn">Save distribution</button>
+</form>
+
+<a class="back-link" href="{% url 'observe_timeline' unit_code=unit.unit_code %}">&larr; Back to timeline</a>
+{% endblock %}

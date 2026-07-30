@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from inventory.models import TrackingUnit
 
-from .models import DailyRound, DailyRoundItem, Observation, QuantityEvent, Treatment
+from .models import DailyRound, DailyRoundItem, DistributionEvent, Observation, QuantityEvent, Treatment
 
 
 def apply_quantity_event(
@@ -300,3 +300,66 @@ def get_weekly_summary(end_date=None):
         'new_units': new_units,
         'archived_units': archived_units,
     }
+
+
+# ── Distribution events ─────────────────────────────────────────────────────────
+
+def record_distribution(
+    *,
+    tracking_unit=None,
+    tracking_unit_id=None,
+    quantity,
+    recipient_name,
+    recipient_organisation='',
+    purpose='',
+    notes='',
+    user,
+):
+    """
+    Record that quantity was distributed to an external recipient.
+
+    Reduces the tracking unit's quantity through the existing quantity-event
+    service (as a LOSS event, so the change is auditable alongside deaths and
+    other losses) and creates an immutable DistributionEvent recording who
+    received it and why, atomically.
+    """
+    if tracking_unit is None and tracking_unit_id is None:
+        raise ValidationError('tracking_unit or tracking_unit_id is required.')
+
+    if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity <= 0:
+        raise ValidationError({'quantity': 'quantity must be a positive integer.'})
+
+    if not recipient_name:
+        raise ValidationError({'recipient_name': 'recipient_name is required.'})
+
+    if tracking_unit is not None:
+        tracking_unit_id = tracking_unit.pk
+
+    with transaction.atomic():
+        unit = TrackingUnit.objects.select_for_update().get(pk=tracking_unit_id)
+
+        reason = f'Distributed to {recipient_name}'
+        if recipient_organisation:
+            reason += f' ({recipient_organisation})'
+
+        apply_quantity_event(
+            tracking_unit=unit,
+            event_type=QuantityEvent.EVENT_TYPE_LOSS,
+            quantity_change=-quantity,
+            user=user,
+            reason=reason,
+        )
+
+        event = DistributionEvent(
+            tracking_unit=unit,
+            quantity=quantity,
+            recipient_name=recipient_name,
+            recipient_organisation=recipient_organisation,
+            purpose=purpose,
+            notes=notes,
+            created_by=user,
+        )
+        event.full_clean()
+        event.save()
+
+        return event

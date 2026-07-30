@@ -301,6 +301,52 @@ class DailyRoundCreateForm(forms.ModelForm):
         }
 
 
+class DistributionEventForm(forms.Form):
+
+    quantity = forms.IntegerField(
+        min_value=1,
+        label='Quantity distributed',
+    )
+    recipient_name = forms.CharField(
+        max_length=200,
+        label='Recipient name',
+    )
+    recipient_organisation = forms.CharField(
+        max_length=200,
+        required=False,
+        label='Recipient organisation',
+    )
+    purpose = forms.CharField(
+        max_length=255,
+        required=False,
+        label='Purpose',
+        widget=forms.TextInput(attrs={'placeholder': 'e.g. Community distribution, research exchange'}),
+    )
+    notes = forms.CharField(
+        required=False,
+        label='Notes',
+        widget=forms.Textarea(attrs={'rows': 3}),
+    )
+
+    def __init__(self, *args, current_quantity=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._current_quantity = current_quantity
+
+    def clean_quantity(self):
+        quantity = self.cleaned_data['quantity']
+        if self._current_quantity is not None and quantity > self._current_quantity:
+            raise forms.ValidationError(
+                f'Cannot exceed the current quantity ({self._current_quantity}).'
+            )
+        return quantity
+
+    def clean_recipient_name(self):
+        recipient_name = self.cleaned_data.get('recipient_name', '').strip()
+        if not recipient_name:
+            raise forms.ValidationError('Recipient name is required.')
+        return recipient_name
+
+
 class DailyRoundEditForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):

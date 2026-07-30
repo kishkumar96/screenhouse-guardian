@@ -7,6 +7,7 @@ urlpatterns = [
     path('', views.index, name='index'),
     path('units/<str:unit_code>/quantity-event/', views.create_quantity_event, name='create_quantity_event'),
     path('units/<str:unit_code>/treatments/new/', views.create_treatment, name='create_treatment'),
+    path('units/<str:unit_code>/distribute/', views.create_distribution, name='create_distribution'),
     path('treatments/<int:treatment_id>/outcome/', views.update_treatment_outcome, name='update_treatment_outcome'),
     # Daily rounds
     path('rounds/', views.round_list, name='round_list'),

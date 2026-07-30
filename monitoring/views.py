@@ -11,6 +11,7 @@ from inventory.models import Crop, TrackingUnit
 from .forms import (
     DailyRoundCreateForm,
     DailyRoundEditForm,
+    DistributionEventForm,
     ObservationForm,
     ObservationPhotoForm,
     QuantityEventForm,
@@ -25,6 +26,7 @@ from .services import (
     create_daily_round_with_items,
     get_weekly_summary,
     mark_overdue_rounds_missed,
+    record_distribution,
     update_daily_round_status,
 )
 
@@ -188,12 +190,18 @@ def timeline(request, unit_code):
         )
         .order_by('-moved_at')
     )
+    distributions = (
+        unit.distribution_events
+        .select_related('created_by')
+        .order_by('-distributed_at')
+    )
     return render(request, 'monitoring/timeline.html', {
         'unit': unit,
         'observations': observations,
         'quantity_events': quantity_events,
         'treatments': treatments,
         'movements': movements,
+        'distributions': distributions,
         'show_manager_links': is_manager(request.user),
     })
 
@@ -268,6 +276,41 @@ def create_treatment(request, unit_code):
         'unit': unit,
         'form': form,
         'latest_obs': latest_obs,
+    })
+
+
+@manager_required
+def create_distribution(request, unit_code):
+    unit = _get_unit_with_related(unit_code)
+
+    if not unit.is_active:
+        messages.error(request, 'Distributions cannot be recorded for archived units.')
+        return redirect('observe_timeline', unit_code=unit_code)
+
+    if request.method == 'POST':
+        form = DistributionEventForm(request.POST, current_quantity=unit.quantity)
+        if form.is_valid():
+            record_distribution(
+                tracking_unit=unit,
+                quantity=form.cleaned_data['quantity'],
+                recipient_name=form.cleaned_data['recipient_name'],
+                recipient_organisation=form.cleaned_data['recipient_organisation'],
+                purpose=form.cleaned_data['purpose'],
+                notes=form.cleaned_data['notes'],
+                user=request.user,
+            )
+            messages.success(
+                request,
+                f'Recorded distribution of {form.cleaned_data["quantity"]} '
+                f'to {form.cleaned_data["recipient_name"]}.',
+            )
+            return redirect('observe_timeline', unit_code=unit_code)
+    else:
+        form = DistributionEventForm(current_quantity=unit.quantity)
+
+    return render(request, 'monitoring/distribution_form.html', {
+        'unit': unit,
+        'form': form,
     })
 
 

@@ -1149,6 +1149,124 @@ class TimelineMovementHistoryTest(TestCase):
         self.assertNotContains(response, 'Move unit')
 
 
+# ── Distribution events ───────────────────────────────────────────────────────
+
+class DistributionAccessTest(TestCase):
+
+    def setUp(self):
+        self.observer = make_observer(username='dist_obs_access')
+        self.manager = make_manager(username='dist_mgr_access')
+        self.unit = make_unit('TU-DIST-ACC-001', quantity=10)
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.get(f'/monitoring/units/{self.unit.unit_code}/distribute/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+    def test_observer_gets_403(self):
+        self.client.login(username='dist_obs_access', password=_PASSWORD)
+        response = self.client.get(f'/monitoring/units/{self.unit.unit_code}/distribute/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_gets_200(self):
+        self.client.login(username='dist_mgr_access', password=_PASSWORD)
+        response = self.client.get(f'/monitoring/units/{self.unit.unit_code}/distribute/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_archived_unit_redirects(self):
+        archived = make_unit('TU-DIST-ARCH-001', quantity=5, is_active=False)
+        self.client.login(username='dist_mgr_access', password=_PASSWORD)
+        response = self.client.get(f'/monitoring/units/{archived.unit_code}/distribute/')
+        self.assertEqual(response.status_code, 302)
+
+
+class DistributionPostTest(TestCase):
+
+    def setUp(self):
+        make_manager(username='dist_mgr_post')
+        self.client.login(username='dist_mgr_post', password=_PASSWORD)
+        self.unit = make_unit('TU-DIST-POST-001', quantity=20)
+
+    def _post(self, **overrides):
+        data = {
+            'quantity': '5',
+            'recipient_name': 'Botanic Garden',
+            'recipient_organisation': '',
+            'purpose': '',
+            'notes': '',
+        }
+        data.update(overrides)
+        return self.client.post(
+            f'/monitoring/units/{self.unit.unit_code}/distribute/', data,
+        )
+
+    def test_valid_post_reduces_quantity(self):
+        self._post()
+        self.unit.refresh_from_db()
+        self.assertEqual(self.unit.quantity, 15)
+
+    def test_valid_post_redirects_to_timeline(self):
+        response = self._post()
+        self.assertRedirects(response, f'/observe/{self.unit.unit_code}/timeline/')
+
+    def test_quantity_exceeding_available_is_rejected(self):
+        response = self._post(quantity='999')
+        self.assertEqual(response.status_code, 200)
+        self.unit.refresh_from_db()
+        self.assertEqual(self.unit.quantity, 20)
+
+    def test_missing_recipient_name_is_rejected(self):
+        response = self._post(recipient_name='')
+        self.assertEqual(response.status_code, 200)
+        self.unit.refresh_from_db()
+        self.assertEqual(self.unit.quantity, 20)
+
+    def test_observer_cannot_post(self):
+        make_observer(username='dist_post_obs')
+        self.client.login(username='dist_post_obs', password=_PASSWORD)
+        response = self._post()
+        self.assertEqual(response.status_code, 403)
+
+
+class TimelineDistributionHistoryTest(TestCase):
+
+    def setUp(self):
+        from monitoring.services import record_distribution
+        self.manager = make_manager(username='dist_mgr_tl')
+        self.observer = make_observer(username='dist_obs_tl')
+        self.unit = make_unit('TU-DIST-TL-001', quantity=20)
+        record_distribution(
+            tracking_unit=self.unit, quantity=5, recipient_name='Botanic Garden',
+            recipient_organisation='National Trust', purpose='Research exchange',
+            user=self.manager,
+        )
+
+    def _get_timeline(self, user):
+        self.client.login(username=user.username, password=_PASSWORD)
+        return self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+
+    def test_timeline_shows_distribution_heading(self):
+        response = self._get_timeline(self.observer)
+        self.assertContains(response, 'Distribution History')
+
+    def test_timeline_shows_recipient(self):
+        response = self._get_timeline(self.observer)
+        self.assertContains(response, 'Botanic Garden')
+        self.assertContains(response, 'National Trust')
+
+    def test_timeline_shows_purpose(self):
+        response = self._get_timeline(self.observer)
+        self.assertContains(response, 'Research exchange')
+
+    def test_manager_sees_record_distribution_link(self):
+        response = self._get_timeline(self.manager)
+        self.assertContains(response, 'Record distribution')
+
+    def test_observer_does_not_see_record_distribution_link(self):
+        response = self._get_timeline(self.observer)
+        self.assertNotContains(response, 'Record distribution')
+
+
 class TreatmentOutcomeUpdateTest(TestCase):
 
     def setUp(self):

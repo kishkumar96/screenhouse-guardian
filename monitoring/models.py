@@ -497,3 +497,38 @@ class DailyRoundItem(models.Model):
     def __str__(self):
         status = 'done' if self.completed else 'pending'
         return f'{self.daily_round} — {self.tracking_unit.unit_code} [{status}]'
+
+
+# ── DistributionEvent ────────────────────────────────────────────────────────────
+
+class DistributionEvent(models.Model):
+
+    tracking_unit = models.ForeignKey(
+        TrackingUnit,
+        on_delete=models.CASCADE,
+        related_name='distribution_events',
+    )
+    quantity = models.PositiveIntegerField()
+    recipient_name = models.CharField(max_length=200)
+    recipient_organisation = models.CharField(max_length=200, blank=True)
+    purpose = models.CharField(max_length=255, blank=True)
+    notes = models.TextField(blank=True)
+    distributed_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_distribution_events',
+    )
+
+    class Meta:
+        ordering = ['-distributed_at']
+
+    def __str__(self):
+        return f'{self.tracking_unit.unit_code} — {self.quantity} to {self.recipient_name}'
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError('Distribution events are immutable.')
+        super().save(*args, **kwargs)

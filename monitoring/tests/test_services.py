@@ -6,12 +6,13 @@ from django.utils import timezone
 from inventory.models import TrackingUnit
 import datetime
 
-from monitoring.models import DailyRound, DailyRoundItem, Observation, QuantityEvent, Treatment
+from monitoring.models import DailyRound, DailyRoundItem, DistributionEvent, Observation, QuantityEvent, Treatment
 from monitoring.services import (
     apply_quantity_event,
     create_daily_round_with_items,
     get_units_for_round_generation,
     get_weekly_summary,
+    record_distribution,
     update_daily_round_status,
     MODE_ALL_ACTIVE,
     MODE_NOT_CHECKED_7_DAYS,
@@ -628,3 +629,81 @@ class GetWeeklySummaryTest(TestCase):
         summary = get_weekly_summary(end_date=self.today - datetime.timedelta(days=14))
 
         self.assertEqual(summary['observation_total'], 0)
+
+
+class RecordDistributionServiceTest(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username='dist-service-user',
+            password='test-password-123',
+        )
+
+    def test_reduces_unit_quantity(self):
+        unit = make_container('TU-DIST-001', quantity=20)
+
+        record_distribution(
+            tracking_unit=unit, quantity=5, recipient_name='Botanic Garden', user=self.user,
+        )
+
+        unit.refresh_from_db()
+        self.assertEqual(unit.quantity, 15)
+
+    def test_creates_quantity_event_as_loss(self):
+        unit = make_container('TU-DIST-002', quantity=20)
+
+        record_distribution(
+            tracking_unit=unit, quantity=5, recipient_name='Botanic Garden', user=self.user,
+        )
+
+        event = QuantityEvent.objects.get(tracking_unit=unit)
+        self.assertEqual(event.event_type, QuantityEvent.EVENT_TYPE_LOSS)
+        self.assertEqual(event.quantity_change, -5)
+        self.assertIn('Botanic Garden', event.reason)
+
+    def test_creates_distribution_event_record(self):
+        unit = make_container('TU-DIST-003', quantity=20)
+
+        event = record_distribution(
+            tracking_unit=unit, quantity=5, recipient_name='Botanic Garden',
+            recipient_organisation='National Trust', purpose='Research exchange',
+            user=self.user,
+        )
+
+        self.assertEqual(event.quantity, 5)
+        self.assertEqual(event.recipient_name, 'Botanic Garden')
+        self.assertEqual(event.recipient_organisation, 'National Trust')
+        self.assertEqual(event.purpose, 'Research exchange')
+        self.assertEqual(DistributionEvent.objects.filter(tracking_unit=unit).count(), 1)
+
+    def test_cannot_distribute_more_than_available(self):
+        unit = make_container('TU-DIST-004', quantity=3)
+
+        with self.assertRaises(ValidationError):
+            record_distribution(
+                tracking_unit=unit, quantity=10, recipient_name='Botanic Garden', user=self.user,
+            )
+
+    def test_requires_positive_quantity(self):
+        unit = make_container('TU-DIST-005', quantity=10)
+
+        with self.assertRaises(ValidationError):
+            record_distribution(
+                tracking_unit=unit, quantity=0, recipient_name='Botanic Garden', user=self.user,
+            )
+
+    def test_requires_recipient_name(self):
+        unit = make_container('TU-DIST-006', quantity=10)
+
+        with self.assertRaises(ValidationError):
+            record_distribution(tracking_unit=unit, quantity=1, recipient_name='', user=self.user)
+
+    def test_distribution_event_is_immutable(self):
+        unit = make_container('TU-DIST-007', quantity=10)
+        event = record_distribution(
+            tracking_unit=unit, quantity=1, recipient_name='Botanic Garden', user=self.user,
+        )
+
+        event.notes = 'edited'
+        with self.assertRaises(ValidationError):
+            event.save()
