@@ -7,7 +7,7 @@ from config.permissions import is_manager, manager_required, observer_required
 
 from .forms import AccessionForm, ArchiveTrackingUnitForm, BatchForm, CropForm, MoveTrackingUnitForm
 from .models import Accession, Batch, Crop, TrackingUnit
-from .services import record_movement
+from .services import get_accession_survival_stats, get_batch_survival_stats, record_movement
 
 
 @observer_required
@@ -189,4 +189,12 @@ def move_tracking_unit(request, unit_code):
     return render(request, 'inventory/move_tracking_unit.html', {
         'unit': unit,
         'form': form,
+    })
+
+
+@observer_required
+def survival_report(request):
+    return render(request, 'inventory/survival_report.html', {
+        'batch_stats': get_batch_survival_stats(),
+        'accession_stats': get_accession_survival_stats(),
     })

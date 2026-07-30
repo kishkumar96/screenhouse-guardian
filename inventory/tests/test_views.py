@@ -589,3 +589,48 @@ class MoveUnitPostTest(TestCase):
             {'to_location_text': 'Bay B'},
         )
         self.assertEqual(response.status_code, 403)
+
+
+# ── /inventory/survival/ ─────────────────────────────────────────────────────
+
+class SurvivalReportAccessTest(TestCase):
+
+    def test_anonymous_redirects_to_login(self):
+        response = self.client.get('/inventory/survival/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+    def test_observer_gets_200(self):
+        make_observer('sv_obs_access')
+        self.client.login(username='sv_obs_access', password=PASSWORD)
+        response = self.client.get('/inventory/survival/')
+        self.assertEqual(response.status_code, 200)
+
+
+class SurvivalReportContentTest(TestCase):
+
+    def setUp(self):
+        make_observer('sv_obs_content')
+        self.client.login(username='sv_obs_content', password=PASSWORD)
+        self.crop = Crop.objects.create(name='Survival Crop')
+        self.accession = Accession.objects.create(crop=self.crop, accession_code='SV-ACC-1')
+        self.batch = Batch.objects.create(
+            accession=self.accession, batch_code='SV-B1', initial_quantity=10,
+        )
+        TrackingUnit.objects.create(
+            unit_code='TU-SV-CONTENT-1', unit_type=TrackingUnit.UNIT_TYPE_CONTAINER,
+            crop_name='Survival Crop', crop=self.crop, accession=self.accession,
+            batch=self.batch, quantity=10,
+        )
+
+    def test_shows_batch_code(self):
+        response = self.client.get('/inventory/survival/')
+        self.assertContains(response, 'SV-B1')
+
+    def test_shows_accession_code(self):
+        response = self.client.get('/inventory/survival/')
+        self.assertContains(response, 'SV-ACC-1')
+
+    def test_shows_full_survival_rate(self):
+        response = self.client.get('/inventory/survival/')
+        self.assertContains(response, '100.0%')
