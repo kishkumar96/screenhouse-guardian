@@ -6,13 +6,16 @@ from django.utils import timezone
 from inventory.models import TrackingUnit
 import datetime
 
-from monitoring.models import DailyRound, DailyRoundItem, DistributionEvent, Observation, QuantityEvent, Treatment
+from monitoring.models import (
+    DailyRound, DailyRoundItem, DistributionEvent, Observation, PropagationEvent, QuantityEvent, Treatment,
+)
 from monitoring.services import (
     apply_quantity_event,
     create_daily_round_with_items,
     get_units_for_round_generation,
     get_weekly_summary,
     record_distribution,
+    record_propagation,
     update_daily_round_status,
     MODE_ALL_ACTIVE,
     MODE_NOT_CHECKED_7_DAYS,
@@ -707,3 +710,90 @@ class RecordDistributionServiceTest(TestCase):
         event.notes = 'edited'
         with self.assertRaises(ValidationError):
             event.save()
+
+
+class RecordPropagationServiceTest(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username='prop-service-user',
+            password='test-password-123',
+        )
+
+    def test_creates_propagation_event(self):
+        parent = make_container('TU-PROP-001', quantity=20)
+
+        event = record_propagation(
+            parent_unit=parent, method=PropagationEvent.METHOD_CUTTING, user=self.user,
+        )
+
+        self.assertEqual(event.parent_unit, parent)
+        self.assertEqual(event.method, PropagationEvent.METHOD_CUTTING)
+        self.assertEqual(PropagationEvent.objects.filter(parent_unit=parent).count(), 1)
+
+    def test_quantity_taken_reduces_parent_quantity(self):
+        parent = make_container('TU-PROP-002', quantity=20)
+
+        record_propagation(
+            parent_unit=parent, method=PropagationEvent.METHOD_DIVISION,
+            quantity_taken=5, user=self.user,
+        )
+
+        parent.refresh_from_db()
+        self.assertEqual(parent.quantity, 15)
+        loss_event = QuantityEvent.objects.get(tracking_unit=parent)
+        self.assertEqual(loss_event.event_type, QuantityEvent.EVENT_TYPE_LOSS)
+        self.assertEqual(loss_event.quantity_change, -5)
+
+    def test_no_quantity_taken_leaves_parent_unchanged(self):
+        parent = make_container('TU-PROP-003', quantity=20)
+
+        record_propagation(
+            parent_unit=parent, method=PropagationEvent.METHOD_SEED, user=self.user,
+        )
+
+        parent.refresh_from_db()
+        self.assertEqual(parent.quantity, 20)
+        self.assertFalse(QuantityEvent.objects.filter(tracking_unit=parent).exists())
+
+    def test_resulting_units_are_linked(self):
+        parent = make_container('TU-PROP-004', quantity=20)
+        child1 = make_container('TU-PROP-004-C1', quantity=1)
+        child2 = make_container('TU-PROP-004-C2', quantity=1)
+
+        event = record_propagation(
+            parent_unit=parent, method=PropagationEvent.METHOD_CUTTING, user=self.user,
+            resulting_units=[child1, child2],
+        )
+
+        self.assertEqual(set(event.resulting_units.all()), {child1, child2})
+
+    def test_cannot_take_more_than_available(self):
+        parent = make_container('TU-PROP-005', quantity=3)
+
+        with self.assertRaises(ValidationError):
+            record_propagation(
+                parent_unit=parent, method=PropagationEvent.METHOD_CUTTING,
+                quantity_taken=10, user=self.user,
+            )
+
+    def test_propagation_event_scalar_fields_are_immutable(self):
+        parent = make_container('TU-PROP-006', quantity=10)
+        event = record_propagation(
+            parent_unit=parent, method=PropagationEvent.METHOD_CUTTING, user=self.user,
+        )
+
+        event.notes = 'edited'
+        with self.assertRaises(ValidationError):
+            event.save()
+
+    def test_resulting_units_can_still_be_linked_after_creation(self):
+        parent = make_container('TU-PROP-007', quantity=10)
+        child = make_container('TU-PROP-007-C1', quantity=1)
+        event = record_propagation(
+            parent_unit=parent, method=PropagationEvent.METHOD_CUTTING, user=self.user,
+        )
+
+        event.resulting_units.add(child)
+
+        self.assertIn(child, event.resulting_units.all())

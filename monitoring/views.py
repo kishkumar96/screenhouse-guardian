@@ -14,6 +14,7 @@ from .forms import (
     DistributionEventForm,
     ObservationForm,
     ObservationPhotoForm,
+    PropagationEventForm,
     QuantityEventForm,
     TreatmentForm,
     TreatmentOutcomeForm,
@@ -27,6 +28,7 @@ from .services import (
     get_weekly_summary,
     mark_overdue_rounds_missed,
     record_distribution,
+    record_propagation,
     update_daily_round_status,
 )
 
@@ -195,6 +197,12 @@ def timeline(request, unit_code):
         .select_related('created_by')
         .order_by('-distributed_at')
     )
+    propagations = (
+        unit.propagation_events_as_parent
+        .prefetch_related('resulting_units')
+        .select_related('created_by')
+        .order_by('-propagated_at')
+    )
     return render(request, 'monitoring/timeline.html', {
         'unit': unit,
         'observations': observations,
@@ -202,6 +210,7 @@ def timeline(request, unit_code):
         'treatments': treatments,
         'movements': movements,
         'distributions': distributions,
+        'propagations': propagations,
         'show_manager_links': is_manager(request.user),
     })
 
@@ -309,6 +318,36 @@ def create_distribution(request, unit_code):
         form = DistributionEventForm(current_quantity=unit.quantity)
 
     return render(request, 'monitoring/distribution_form.html', {
+        'unit': unit,
+        'form': form,
+    })
+
+
+@manager_required
+def create_propagation(request, unit_code):
+    unit = _get_unit_with_related(unit_code)
+
+    if not unit.is_active:
+        messages.error(request, 'Propagations cannot be recorded for archived units.')
+        return redirect('observe_timeline', unit_code=unit_code)
+
+    if request.method == 'POST':
+        form = PropagationEventForm(request.POST, parent_unit=unit, current_quantity=unit.quantity)
+        if form.is_valid():
+            record_propagation(
+                parent_unit=unit,
+                method=form.cleaned_data['method'],
+                quantity_taken=form.cleaned_data['quantity_taken'],
+                notes=form.cleaned_data['notes'],
+                user=request.user,
+                resulting_units=form.cleaned_data['resulting_units'],
+            )
+            messages.success(request, f'Recorded propagation from {unit.unit_code}.')
+            return redirect('observe_timeline', unit_code=unit_code)
+    else:
+        form = PropagationEventForm(parent_unit=unit, current_quantity=unit.quantity)
+
+    return render(request, 'monitoring/propagation_form.html', {
         'unit': unit,
         'form': form,
     })

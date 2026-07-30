@@ -532,3 +532,63 @@ class DistributionEvent(models.Model):
         if not self._state.adding:
             raise ValidationError('Distribution events are immutable.')
         super().save(*args, **kwargs)
+
+
+# ── PropagationEvent ─────────────────────────────────────────────────────────────
+
+class PropagationEvent(models.Model):
+
+    METHOD_CUTTING = 'cutting'
+    METHOD_SEED = 'seed'
+    METHOD_TISSUE_CULTURE = 'tissue_culture'
+    METHOD_DIVISION = 'division'
+    METHOD_GRAFTING = 'grafting'
+    METHOD_OTHER = 'other'
+    METHOD_CHOICES = [
+        (METHOD_CUTTING, 'Cutting'),
+        (METHOD_SEED, 'Seed'),
+        (METHOD_TISSUE_CULTURE, 'Tissue Culture'),
+        (METHOD_DIVISION, 'Division'),
+        (METHOD_GRAFTING, 'Grafting'),
+        (METHOD_OTHER, 'Other'),
+    ]
+
+    parent_unit = models.ForeignKey(
+        TrackingUnit,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='propagation_events_as_parent',
+    )
+    # Units created from this propagation. Left as a plain M2M rather than a
+    # unit-creation wizard: new units are created the normal way (admin), then
+    # linked here — see Phase 1A convention that unit creation happens outside
+    # this app.
+    resulting_units = models.ManyToManyField(
+        TrackingUnit,
+        blank=True,
+        related_name='propagated_from_events',
+    )
+    method = models.CharField(max_length=30, choices=METHOD_CHOICES)
+    quantity_taken = models.PositiveIntegerField(blank=True, null=True)
+    notes = models.TextField(blank=True)
+    propagated_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_propagation_events',
+    )
+
+    class Meta:
+        ordering = ['-propagated_at']
+
+    def __str__(self):
+        parent = self.parent_unit.unit_code if self.parent_unit else 'Unknown parent'
+        return f'{parent} — {self.get_method_display()} ({self.propagated_at.date()})'
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError('Propagation events are immutable (resulting_units may still be linked).')
+        super().save(*args, **kwargs)

@@ -7,7 +7,9 @@ from django.utils import timezone
 
 from inventory.models import TrackingUnit
 
-from .models import DailyRound, DailyRoundItem, DistributionEvent, Observation, QuantityEvent, Treatment
+from .models import (
+    DailyRound, DailyRoundItem, DistributionEvent, Observation, PropagationEvent, QuantityEvent, Treatment,
+)
 
 
 def apply_quantity_event(
@@ -361,5 +363,62 @@ def record_distribution(
         )
         event.full_clean()
         event.save()
+
+        return event
+
+
+# ── Propagation events ──────────────────────────────────────────────────────────
+
+def record_propagation(
+    *,
+    parent_unit=None,
+    parent_unit_id=None,
+    method,
+    quantity_taken=None,
+    notes='',
+    user,
+    resulting_units=None,
+):
+    """
+    Record that new tracking units were propagated from a parent unit.
+
+    If quantity_taken is given, it is deducted from the parent unit's
+    quantity through the existing quantity-event service (as a LOSS event,
+    reason noting propagation), since that material left the source unit.
+    resulting_units (an iterable of already-created TrackingUnit rows) are
+    linked to the event via its M2M field; new units are still created the
+    normal way (e.g. admin) — this only records the link and any material
+    taken from the parent.
+    """
+    if parent_unit is None and parent_unit_id is None:
+        raise ValidationError('parent_unit or parent_unit_id is required.')
+
+    if parent_unit is not None:
+        parent_unit_id = parent_unit.pk
+
+    with transaction.atomic():
+        unit = TrackingUnit.objects.select_for_update().get(pk=parent_unit_id)
+
+        if quantity_taken:
+            apply_quantity_event(
+                tracking_unit=unit,
+                event_type=QuantityEvent.EVENT_TYPE_LOSS,
+                quantity_change=-quantity_taken,
+                user=user,
+                reason=f'Propagation ({dict(PropagationEvent.METHOD_CHOICES).get(method, method)})',
+            )
+
+        event = PropagationEvent(
+            parent_unit=unit,
+            method=method,
+            quantity_taken=quantity_taken,
+            notes=notes,
+            created_by=user,
+        )
+        event.full_clean()
+        event.save()
+
+        if resulting_units:
+            event.resulting_units.set(resulting_units)
 
         return event

@@ -235,6 +235,18 @@
 .distribution-headline { font-size: 0.9rem; color: #333; }
 .distribution-purpose { color: #555; font-style: italic; margin-top: 0.2rem; }
 .distribution-meta { font-size: 0.8rem; color: #777; margin-top: 0.25rem; }
+.propagation-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-left: 3px solid #4db6ac;
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.875rem;
+}
+.propagation-headline { font-size: 0.9rem; color: #333; }
+.propagation-units { color: #555; margin-top: 0.2rem; }
+.propagation-meta { font-size: 0.8rem; color: #777; margin-top: 0.25rem; }
 {% endblock %}
 
 {% block content %}
@@ -266,6 +278,7 @@
   <a href="{% url 'monitoring:create_quantity_event' unit_code=unit.unit_code %}" class="secondary">Record quantity change</a>
   <a href="{% url 'monitoring:create_treatment' unit_code=unit.unit_code %}" class="secondary" style="border-color:#f9a825;color:#f57f17;">Record treatment</a>
   <a href="{% url 'monitoring:create_distribution' unit_code=unit.unit_code %}" class="secondary" style="border-color:#9575cd;color:#6a4ca0;">Record distribution</a>
+  <a href="{% url 'monitoring:create_propagation' unit_code=unit.unit_code %}" class="secondary" style="border-color:#4db6ac;color:#00796b;">Record propagation</a>
   <a href="{% url 'inventory:move_tracking_unit' unit_code=unit.unit_code %}" class="secondary" style="border-color:#1565c0;color:#1565c0;">Move unit</a>
   <a href="{% url 'inventory:archive_tracking_unit' unit_code=unit.unit_code %}" class="secondary" style="border-color:#e65100;color:#e65100;">Archive unit</a>
   {% endif %}
@@ -323,6 +336,29 @@
   <p class="distribution-meta">
     {{ dist.distributed_at|date:"d M Y, H:i" }}
     {% if dist.created_by %} &mdash; {{ dist.created_by.get_full_name|default:dist.created_by.username }}{% endif %}
+  </p>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if propagations %}
+<h3 class="section-heading" style="margin-top:1.75rem;">Propagation History</h3>
+{% for prop in propagations %}
+<div class="propagation-card">
+  <div class="propagation-headline">
+    {{ prop.get_method_display }}
+    {% if prop.quantity_taken %} — {{ prop.quantity_taken }} taken{% endif %}
+  </div>
+  {% if prop.resulting_units.all %}
+  <p class="propagation-units">
+    Resulting units:
+    {% for ru in prop.resulting_units.all %}{{ ru.unit_code }}{% if not forloop.last %}, {% endif %}{% endfor %}
+  </p>
+  {% endif %}
+  {% if prop.notes %}<p class="distribution-purpose">"{{ prop.notes }}"</p>{% endif %}
+  <p class="propagation-meta">
+    {{ prop.propagated_at|date:"d M Y, H:i" }}
+    {% if prop.created_by %} &mdash; {{ prop.created_by.get_full_name|default:prop.created_by.username }}{% endif %}
   </p>
 </div>
 {% endfor %}

@@ -1267,6 +1267,134 @@ class TimelineDistributionHistoryTest(TestCase):
         self.assertNotContains(response, 'Record distribution')
 
 
+# ── Propagation events ────────────────────────────────────────────────────────
+
+class PropagationAccessTest(TestCase):
+
+    def setUp(self):
+        self.observer = make_observer(username='prop_obs_access')
+        self.manager = make_manager(username='prop_mgr_access')
+        self.unit = make_unit('TU-PROP-ACC-001', quantity=10)
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.get(f'/monitoring/units/{self.unit.unit_code}/propagate/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+    def test_observer_gets_403(self):
+        self.client.login(username='prop_obs_access', password=_PASSWORD)
+        response = self.client.get(f'/monitoring/units/{self.unit.unit_code}/propagate/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_gets_200(self):
+        self.client.login(username='prop_mgr_access', password=_PASSWORD)
+        response = self.client.get(f'/monitoring/units/{self.unit.unit_code}/propagate/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_archived_unit_redirects(self):
+        archived = make_unit('TU-PROP-ARCH-001', quantity=5, is_active=False)
+        self.client.login(username='prop_mgr_access', password=_PASSWORD)
+        response = self.client.get(f'/monitoring/units/{archived.unit_code}/propagate/')
+        self.assertEqual(response.status_code, 302)
+
+
+class PropagationPostTest(TestCase):
+
+    def setUp(self):
+        make_manager(username='prop_mgr_post')
+        self.client.login(username='prop_mgr_post', password=_PASSWORD)
+        self.unit = make_unit('TU-PROP-POST-001', quantity=20)
+
+    def test_valid_post_creates_event(self):
+        from monitoring.models import PropagationEvent
+        self.client.post(
+            f'/monitoring/units/{self.unit.unit_code}/propagate/',
+            {'method': PropagationEvent.METHOD_CUTTING, 'quantity_taken': '', 'resulting_units': []},
+        )
+        self.assertTrue(PropagationEvent.objects.filter(parent_unit=self.unit).exists())
+
+    def test_valid_post_redirects_to_timeline(self):
+        from monitoring.models import PropagationEvent
+        response = self.client.post(
+            f'/monitoring/units/{self.unit.unit_code}/propagate/',
+            {'method': PropagationEvent.METHOD_CUTTING, 'quantity_taken': '', 'resulting_units': []},
+        )
+        self.assertRedirects(response, f'/observe/{self.unit.unit_code}/timeline/')
+
+    def test_quantity_taken_reduces_parent(self):
+        from monitoring.models import PropagationEvent
+        self.client.post(
+            f'/monitoring/units/{self.unit.unit_code}/propagate/',
+            {'method': PropagationEvent.METHOD_CUTTING, 'quantity_taken': '4', 'resulting_units': []},
+        )
+        self.unit.refresh_from_db()
+        self.assertEqual(self.unit.quantity, 16)
+
+    def test_quantity_taken_exceeding_available_is_rejected(self):
+        from monitoring.models import PropagationEvent
+        response = self.client.post(
+            f'/monitoring/units/{self.unit.unit_code}/propagate/',
+            {'method': PropagationEvent.METHOD_CUTTING, 'quantity_taken': '999', 'resulting_units': []},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.unit.refresh_from_db()
+        self.assertEqual(self.unit.quantity, 20)
+
+    def test_observer_cannot_post(self):
+        from monitoring.models import PropagationEvent
+        make_observer(username='prop_post_obs')
+        self.client.login(username='prop_post_obs', password=_PASSWORD)
+        response = self.client.post(
+            f'/monitoring/units/{self.unit.unit_code}/propagate/',
+            {'method': PropagationEvent.METHOD_CUTTING, 'quantity_taken': '', 'resulting_units': []},
+        )
+        self.assertEqual(response.status_code, 403)
+
+
+class TimelinePropagationHistoryTest(TestCase):
+
+    def setUp(self):
+        from monitoring.models import PropagationEvent
+        from monitoring.services import record_propagation
+        self.manager = make_manager(username='prop_mgr_tl')
+        self.observer = make_observer(username='prop_obs_tl')
+        self.unit = make_unit('TU-PROP-TL-001', quantity=20)
+        self.child = make_unit('TU-PROP-TL-001-C1', quantity=1)
+        record_propagation(
+            parent_unit=self.unit, method=PropagationEvent.METHOD_CUTTING,
+            quantity_taken=3, notes='Rooted cuttings', user=self.manager,
+            resulting_units=[self.child],
+        )
+
+    def _get_timeline(self, user):
+        self.client.login(username=user.username, password=_PASSWORD)
+        return self.client.get(f'/observe/{self.unit.unit_code}/timeline/')
+
+    def test_timeline_shows_propagation_heading(self):
+        response = self._get_timeline(self.observer)
+        self.assertContains(response, 'Propagation History')
+
+    def test_timeline_shows_method(self):
+        response = self._get_timeline(self.observer)
+        self.assertContains(response, 'Cutting')
+
+    def test_timeline_shows_resulting_unit(self):
+        response = self._get_timeline(self.observer)
+        self.assertContains(response, self.child.unit_code)
+
+    def test_timeline_shows_notes(self):
+        response = self._get_timeline(self.observer)
+        self.assertContains(response, 'Rooted cuttings')
+
+    def test_manager_sees_record_propagation_link(self):
+        response = self._get_timeline(self.manager)
+        self.assertContains(response, 'Record propagation')
+
+    def test_observer_does_not_see_record_propagation_link(self):
+        response = self._get_timeline(self.observer)
+        self.assertNotContains(response, 'Record propagation')
+
+
 class TreatmentOutcomeUpdateTest(TestCase):
 
     def setUp(self):

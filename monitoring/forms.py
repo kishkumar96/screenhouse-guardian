@@ -5,7 +5,9 @@ from django.utils import timezone
 
 from django.contrib.auth import get_user_model
 
-from .models import DailyRound, Observation, ObservationPhoto, QuantityEvent, Treatment
+from inventory.models import TrackingUnit
+
+from .models import DailyRound, Observation, ObservationPhoto, PropagationEvent, QuantityEvent, Treatment
 
 User = get_user_model()
 
@@ -345,6 +347,51 @@ class DistributionEventForm(forms.Form):
         if not recipient_name:
             raise forms.ValidationError('Recipient name is required.')
         return recipient_name
+
+
+class PropagationEventForm(forms.Form):
+
+    method = forms.ChoiceField(
+        choices=PropagationEvent.METHOD_CHOICES,
+        label='Propagation method',
+    )
+    quantity_taken = forms.IntegerField(
+        required=False,
+        min_value=1,
+        label='Quantity taken from parent',
+        help_text='Optional. If material was removed from the parent unit, enter how much.',
+    )
+    resulting_units = forms.ModelMultipleChoiceField(
+        queryset=TrackingUnit.objects.none(),
+        required=False,
+        label='Resulting units',
+        help_text='Select any tracking units already created for this propagation (e.g. via admin).',
+    )
+    notes = forms.CharField(
+        required=False,
+        label='Notes',
+        widget=forms.Textarea(attrs={'rows': 3}),
+    )
+
+    def __init__(self, *args, parent_unit=None, current_quantity=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._current_quantity = current_quantity
+        qs = TrackingUnit.objects.filter(is_active=True).order_by('unit_code')
+        if parent_unit is not None:
+            qs = qs.exclude(pk=parent_unit.pk)
+        self.fields['resulting_units'].queryset = qs
+
+    def clean_quantity_taken(self):
+        quantity_taken = self.cleaned_data.get('quantity_taken')
+        if (
+            quantity_taken is not None
+            and self._current_quantity is not None
+            and quantity_taken > self._current_quantity
+        ):
+            raise forms.ValidationError(
+                f'Cannot exceed the current quantity ({self._current_quantity}).'
+            )
+        return quantity_taken
 
 
 class DailyRoundEditForm(forms.ModelForm):
