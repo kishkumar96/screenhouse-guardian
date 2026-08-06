@@ -8,7 +8,7 @@ from django.core.validators import FileExtensionValidator
 from django.db import models
 from django.utils import timezone
 
-from inventory.models import TrackingUnit
+from inventory.models import Position, TrackingUnit
 
 
 # ── Image upload constants ─────────────────────────────────────────────────────
@@ -591,4 +591,47 @@ class PropagationEvent(models.Model):
     def save(self, *args, **kwargs):
         if not self._state.adding:
             raise ValidationError('Propagation events are immutable (resulting_units may still be linked).')
+        super().save(*args, **kwargs)
+
+
+# ── EnvironmentalLog ─────────────────────────────────────────────────────────────
+
+class EnvironmentalLog(models.Model):
+
+    position = models.ForeignKey(
+        Position,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='environmental_logs',
+    )
+    recorded_at = models.DateTimeField(auto_now_add=True)
+    temperature_c = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    humidity_pct = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    light_lux = models.PositiveIntegerField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='recorded_environmental_logs',
+    )
+
+    class Meta:
+        ordering = ['-recorded_at']
+
+    def __str__(self):
+        location = str(self.position) if self.position_id else 'Unknown location'
+        return f'{location} — {self.recorded_at.strftime("%Y-%m-%d %H:%M")}'
+
+    def clean(self):
+        if self.temperature_c is None and self.humidity_pct is None and self.light_lux is None:
+            raise ValidationError(
+                'At least one of temperature_c, humidity_pct, or light_lux must be provided.'
+            )
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError('Environmental logs are immutable.')
         super().save(*args, **kwargs)

@@ -3,11 +3,12 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
-from inventory.models import TrackingUnit
+from inventory.models import Bench, Position, ScreenHouse, Site, TrackingUnit
 import datetime
 
 from monitoring.models import (
-    DailyRound, DailyRoundItem, DistributionEvent, Observation, PropagationEvent, QuantityEvent, Treatment,
+    DailyRound, DailyRoundItem, DistributionEvent, EnvironmentalLog, Observation, PropagationEvent,
+    QuantityEvent, Treatment,
 )
 from monitoring.services import (
     apply_quantity_event,
@@ -15,6 +16,7 @@ from monitoring.services import (
     get_units_for_round_generation,
     get_weekly_summary,
     record_distribution,
+    record_environmental_log,
     record_propagation,
     update_daily_round_status,
     MODE_ALL_ACTIVE,
@@ -22,6 +24,13 @@ from monitoring.services import (
     MODE_WATCH_SICK_CRITICAL,
     MODE_BY_LOCATION,
 )
+
+
+def make_position(code='POS-001'):
+    site = Site.objects.create(name=f'Site for {code}')
+    sh = ScreenHouse.objects.create(site=site, name='SH1')
+    bench = Bench.objects.create(screen_house=sh, name='Bench A')
+    return Position.objects.create(bench=bench, code=code)
 
 
 def make_container(unit_code='TU-SVC-001', quantity=10):
@@ -797,3 +806,53 @@ class RecordPropagationServiceTest(TestCase):
         event.resulting_units.add(child)
 
         self.assertIn(child, event.resulting_units.all())
+
+
+class RecordEnvironmentalLogServiceTest(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username='env-service-user',
+            password='test-password-123',
+        )
+
+    def test_creates_environmental_log(self):
+        position = make_position('POS-ENV-001')
+
+        log = record_environmental_log(
+            position=position, temperature_c=24.5, humidity_pct=60, light_lux=1200, user=self.user,
+        )
+
+        self.assertEqual(log.position, position)
+        self.assertEqual(log.temperature_c, 24.5)
+        self.assertEqual(log.humidity_pct, 60)
+        self.assertEqual(log.light_lux, 1200)
+        self.assertEqual(EnvironmentalLog.objects.filter(position=position).count(), 1)
+
+    def test_accepts_partial_readings(self):
+        position = make_position('POS-ENV-002')
+
+        log = record_environmental_log(position=position, temperature_c=22, user=self.user)
+
+        self.assertEqual(log.temperature_c, 22)
+        self.assertIsNone(log.humidity_pct)
+        self.assertIsNone(log.light_lux)
+
+    def test_requires_at_least_one_reading(self):
+        position = make_position('POS-ENV-003')
+
+        with self.assertRaises(ValidationError):
+            record_environmental_log(position=position, user=self.user)
+
+    def test_position_is_optional(self):
+        log = record_environmental_log(temperature_c=20, user=self.user)
+
+        self.assertIsNone(log.position)
+
+    def test_environmental_log_is_immutable(self):
+        position = make_position('POS-ENV-004')
+        log = record_environmental_log(position=position, temperature_c=20, user=self.user)
+
+        log.notes = 'edited'
+        with self.assertRaises(ValidationError):
+            log.save()

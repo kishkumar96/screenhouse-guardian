@@ -8,7 +8,8 @@ from django.utils import timezone
 from inventory.models import TrackingUnit
 
 from .models import (
-    DailyRound, DailyRoundItem, DistributionEvent, Observation, PropagationEvent, QuantityEvent, Treatment,
+    DailyRound, DailyRoundItem, DistributionEvent, EnvironmentalLog, Observation, PropagationEvent,
+    QuantityEvent, Treatment,
 )
 
 
@@ -422,3 +423,43 @@ def record_propagation(
             event.resulting_units.set(resulting_units)
 
         return event
+
+
+# ── Environmental logs ────────────────────────────────────────────────────────────
+
+def record_environmental_log(
+    *,
+    position=None,
+    position_id=None,
+    temperature_c=None,
+    humidity_pct=None,
+    light_lux=None,
+    notes='',
+    user,
+):
+    """
+    Record an environmental reading (temperature/humidity/light) for a position.
+
+    At least one of temperature_c, humidity_pct, or light_lux must be given —
+    a sensor station may not report all three. Creates an immutable
+    EnvironmentalLog.
+    """
+    if temperature_c is None and humidity_pct is None and light_lux is None:
+        raise ValidationError(
+            'At least one of temperature_c, humidity_pct, or light_lux is required.'
+        )
+
+    if position is not None:
+        position_id = position.pk
+
+    log = EnvironmentalLog(
+        position_id=position_id,
+        temperature_c=temperature_c,
+        humidity_pct=humidity_pct,
+        light_lux=light_lux,
+        notes=notes,
+        recorded_by=user,
+    )
+    log.full_clean()
+    log.save()
+    return log
