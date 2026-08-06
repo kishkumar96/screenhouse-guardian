@@ -2248,6 +2248,11 @@ class EnvironmentalLogAccessTest(TestCase):
         response = self.client.get('/monitoring/environmental-logs/summary/')
         self.assertEqual(response.status_code, 200)
 
+    def test_observer_gets_200_on_layout(self):
+        self.client.login(username='env_obs_access', password=_PASSWORD)
+        response = self.client.get('/monitoring/environmental-logs/layout/')
+        self.assertEqual(response.status_code, 200)
+
 
 class EnvironmentalLogPostTest(TestCase):
 

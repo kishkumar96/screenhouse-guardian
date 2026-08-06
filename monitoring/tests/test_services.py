@@ -13,6 +13,7 @@ from monitoring.models import (
 from monitoring.services import (
     apply_quantity_event,
     create_daily_round_with_items,
+    get_environmental_layout,
     get_environmental_summary,
     get_units_for_round_generation,
     get_weekly_summary,
@@ -902,3 +903,77 @@ class GetEnvironmentalSummaryTest(TestCase):
         position.save()
 
         self.assertEqual(get_environmental_summary(), [])
+
+    def test_normal_status_within_thresholds(self):
+        position = make_position('POS-SUM-005')
+        record_environmental_log(position=position, temperature_c=24, humidity_pct=70, user=self.user)
+
+        self.assertEqual(get_environmental_summary()[0]['status'], 'normal')
+
+    def test_watch_status_slightly_outside_thresholds(self):
+        position = make_position('POS-SUM-006')
+        record_environmental_log(position=position, temperature_c=32, humidity_pct=70, user=self.user)
+
+        self.assertEqual(get_environmental_summary()[0]['status'], 'watch')
+
+    def test_issue_status_far_outside_thresholds(self):
+        position = make_position('POS-SUM-007')
+        record_environmental_log(position=position, temperature_c=40, humidity_pct=70, user=self.user)
+
+        self.assertEqual(get_environmental_summary()[0]['status'], 'issue')
+
+    def test_worse_of_temperature_and_humidity_wins(self):
+        position = make_position('POS-SUM-008')
+        record_environmental_log(position=position, temperature_c=24, humidity_pct=98, user=self.user)
+
+        self.assertEqual(get_environmental_summary()[0]['status'], 'issue')
+
+    def test_light_only_reading_has_no_status(self):
+        position = make_position('POS-SUM-009')
+        record_environmental_log(position=position, light_lux=1000, user=self.user)
+
+        self.assertIsNone(get_environmental_summary()[0]['status'])
+
+
+class GetEnvironmentalLayoutTest(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username='env-layout-user',
+            password='test-password-123',
+        )
+
+    def test_groups_by_site_screen_house_bench(self):
+        position = make_position('POS-LAY-001')
+        record_environmental_log(position=position, temperature_c=24, humidity_pct=70, user=self.user)
+
+        layout = get_environmental_layout()
+
+        self.assertEqual(len(layout), 1)
+        site_row = layout[0]
+        self.assertEqual(site_row['site'], position.bench.screen_house.site)
+        self.assertEqual(len(site_row['screen_houses']), 1)
+        sh_row = site_row['screen_houses'][0]
+        self.assertEqual(sh_row['screen_house'], position.bench.screen_house)
+        self.assertEqual(len(sh_row['benches']), 1)
+        bench_row = sh_row['benches'][0]
+        self.assertEqual(bench_row['bench'], position.bench)
+        self.assertEqual(len(bench_row['positions']), 1)
+
+    def test_bench_status_is_worst_of_its_positions(self):
+        site = Site.objects.create(name='Layout Site')
+        sh = ScreenHouse.objects.create(site=site, name='SH1')
+        bench = Bench.objects.create(screen_house=sh, name='Bench A')
+        normal_position = Position.objects.create(bench=bench, code='P1')
+        issue_position = Position.objects.create(bench=bench, code='P2')
+
+        record_environmental_log(position=normal_position, temperature_c=24, user=self.user)
+        record_environmental_log(position=issue_position, temperature_c=40, user=self.user)
+
+        bench_row = get_environmental_layout()[0]['screen_houses'][0]['benches'][0]
+        self.assertEqual(bench_row['status'], 'issue')
+
+    def test_no_readings_returns_empty_layout(self):
+        make_position('POS-LAY-002')
+
+        self.assertEqual(get_environmental_layout(), [])

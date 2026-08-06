@@ -59,7 +59,11 @@
   <a href="{% url 'monitoring:record_environmental_log' %}" class="rc-add-btn">Record reading</a>
 </div>
 
-<p><a href="{% url 'monitoring:environmental_summary' %}">View summary by position &rarr;</a></p>
+<p>
+  <a href="{% url 'monitoring:environmental_summary' %}">View summary by position &rarr;</a>
+  &nbsp;·&nbsp;
+  <a href="{% url 'monitoring:environmental_layout' %}">View screen house layout &rarr;</a>
+</p>
 
 {% if logs %}
 <div class="rc-table-wrap">

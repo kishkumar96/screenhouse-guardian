@@ -25,4 +25,5 @@ urlpatterns = [
     path('environmental-logs/', views.environmental_log_list, name='environmental_log_list'),
     path('environmental-logs/record/', views.record_environmental_log_view, name='record_environmental_log'),
     path('environmental-logs/summary/', views.environmental_summary, name='environmental_summary'),
+    path('environmental-logs/layout/', views.environmental_layout, name='environmental_layout'),
 ]

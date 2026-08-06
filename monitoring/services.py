@@ -465,6 +465,54 @@ def record_environmental_log(
     return log
 
 
+# Provisional global thresholds for bench-level issue flagging (Decision 016
+# in DECISIONS.md) — not derived from crop-specific data, revisit if needed.
+TEMP_ISSUE_LOW = 12
+TEMP_WATCH_LOW = 18
+TEMP_WATCH_HIGH = 30
+TEMP_ISSUE_HIGH = 35
+
+HUMIDITY_ISSUE_LOW = 35
+HUMIDITY_WATCH_LOW = 50
+HUMIDITY_WATCH_HIGH = 85
+HUMIDITY_ISSUE_HIGH = 95
+
+STATUS_NORMAL = 'normal'
+STATUS_WATCH = 'watch'
+STATUS_ISSUE = 'issue'
+
+_STATUS_SEVERITY = {STATUS_NORMAL: 0, STATUS_WATCH: 1, STATUS_ISSUE: 2}
+
+
+def _reading_status(avg_temperature_c, avg_humidity_pct):
+    """
+    Classify a position's average readings as normal/watch/issue against the
+    thresholds above. Light has no threshold yet. Returns None if neither
+    temperature nor humidity has a value to classify.
+    """
+    statuses = []
+
+    if avg_temperature_c is not None:
+        if avg_temperature_c < TEMP_ISSUE_LOW or avg_temperature_c > TEMP_ISSUE_HIGH:
+            statuses.append(STATUS_ISSUE)
+        elif avg_temperature_c < TEMP_WATCH_LOW or avg_temperature_c > TEMP_WATCH_HIGH:
+            statuses.append(STATUS_WATCH)
+        else:
+            statuses.append(STATUS_NORMAL)
+
+    if avg_humidity_pct is not None:
+        if avg_humidity_pct < HUMIDITY_ISSUE_LOW or avg_humidity_pct > HUMIDITY_ISSUE_HIGH:
+            statuses.append(STATUS_ISSUE)
+        elif avg_humidity_pct < HUMIDITY_WATCH_LOW or avg_humidity_pct > HUMIDITY_WATCH_HIGH:
+            statuses.append(STATUS_WATCH)
+        else:
+            statuses.append(STATUS_NORMAL)
+
+    if not statuses:
+        return None
+    return max(statuses, key=_STATUS_SEVERITY.get)
+
+
 def get_environmental_summary():
     """
     For each active Position with at least one EnvironmentalLog, aggregate
@@ -495,18 +543,63 @@ def get_environmental_summary():
         if not stats['reading_count']:
             continue
 
+        avg_temperature_c = (
+            round(stats['avg_temperature_c'], 1)
+            if stats['avg_temperature_c'] is not None else None
+        )
+        avg_humidity_pct = (
+            round(stats['avg_humidity_pct'], 1)
+            if stats['avg_humidity_pct'] is not None else None
+        )
+
         summary.append({
             'position': position,
-            'avg_temperature_c': (
-                round(stats['avg_temperature_c'], 1)
-                if stats['avg_temperature_c'] is not None else None
-            ),
-            'avg_humidity_pct': (
-                round(stats['avg_humidity_pct'], 1)
-                if stats['avg_humidity_pct'] is not None else None
-            ),
+            'avg_temperature_c': avg_temperature_c,
+            'avg_humidity_pct': avg_humidity_pct,
             'max_light_lux': stats['max_light_lux'],
             'reading_count': stats['reading_count'],
             'last_recorded_at': stats['last_recorded_at'],
+            'status': _reading_status(avg_temperature_c, avg_humidity_pct),
         })
     return summary
+
+
+def get_environmental_layout():
+    """
+    Group get_environmental_summary() rows into a Site > Screen House > Bench
+    hierarchy for the layout dashboard. Each bench's status is the most
+    severe status (issue > watch > normal) among its positions.
+
+    Returns a list of dicts: site, screen_houses (list of dicts: screen_house,
+    benches (list of dicts: bench, status, positions (summary rows))).
+    """
+    sites = {}
+    for row in get_environmental_summary():
+        bench = row['position'].bench
+        screen_house = bench.screen_house
+        site = screen_house.site
+
+        site_entry = sites.setdefault(site.id, {'site': site, 'screen_houses': {}})
+        sh_entry = site_entry['screen_houses'].setdefault(
+            screen_house.id, {'screen_house': screen_house, 'benches': {}}
+        )
+        bench_entry = sh_entry['benches'].setdefault(
+            bench.id, {'bench': bench, 'status': STATUS_NORMAL, 'positions': []}
+        )
+        bench_entry['positions'].append(row)
+
+        if row['status'] is not None and (
+            _STATUS_SEVERITY[row['status']] > _STATUS_SEVERITY[bench_entry['status']]
+        ):
+            bench_entry['status'] = row['status']
+
+    result = []
+    for site_entry in sorted(sites.values(), key=lambda s: s['site'].name):
+        screen_houses = []
+        for sh_entry in sorted(
+            site_entry['screen_houses'].values(), key=lambda sh: sh['screen_house'].name
+        ):
+            benches = sorted(sh_entry['benches'].values(), key=lambda b: b['bench'].name)
+            screen_houses.append({'screen_house': sh_entry['screen_house'], 'benches': benches})
+        result.append({'site': site_entry['site'], 'screen_houses': screen_houses})
+    return result

@@ -29,6 +29,7 @@ from .services import (
     create_daily_round_with_items,
     get_weekly_summary,
     mark_overdue_rounds_missed,
+    get_environmental_layout,
     get_environmental_summary,
     record_distribution,
     record_environmental_log,
@@ -708,4 +709,11 @@ def environmental_log_list(request):
 def environmental_summary(request):
     return render(request, 'monitoring/environmental_summary.html', {
         'summary': get_environmental_summary(),
+    })
+
+
+@observer_required
+def environmental_layout(request):
+    return render(request, 'monitoring/environmental_layout.html', {
+        'layout': get_environmental_layout(),
     })
