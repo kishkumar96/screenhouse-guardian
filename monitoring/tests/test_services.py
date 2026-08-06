@@ -13,6 +13,7 @@ from monitoring.models import (
 from monitoring.services import (
     apply_quantity_event,
     create_daily_round_with_items,
+    get_environmental_summary,
     get_units_for_round_generation,
     get_weekly_summary,
     record_distribution,
@@ -856,3 +857,48 @@ class RecordEnvironmentalLogServiceTest(TestCase):
         log.notes = 'edited'
         with self.assertRaises(ValidationError):
             log.save()
+
+
+class GetEnvironmentalSummaryTest(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username='env-summary-user',
+            password='test-password-123',
+        )
+
+    def test_omits_positions_with_no_readings(self):
+        make_position('POS-SUM-001')
+
+        self.assertEqual(get_environmental_summary(), [])
+
+    def test_averages_multiple_readings(self):
+        position = make_position('POS-SUM-002')
+        record_environmental_log(position=position, temperature_c=20, humidity_pct=50, user=self.user)
+        record_environmental_log(position=position, temperature_c=24, humidity_pct=60, user=self.user)
+
+        summary = get_environmental_summary()
+
+        self.assertEqual(len(summary), 1)
+        row = summary[0]
+        self.assertEqual(row['position'], position)
+        self.assertEqual(row['avg_temperature_c'], 22)
+        self.assertEqual(row['avg_humidity_pct'], 55)
+        self.assertEqual(row['reading_count'], 2)
+
+    def test_max_light_lux_is_the_peak_reading(self):
+        position = make_position('POS-SUM-003')
+        record_environmental_log(position=position, light_lux=800, user=self.user)
+        record_environmental_log(position=position, light_lux=1500, user=self.user)
+
+        row = get_environmental_summary()[0]
+
+        self.assertEqual(row['max_light_lux'], 1500)
+
+    def test_inactive_position_is_excluded(self):
+        position = make_position('POS-SUM-004')
+        record_environmental_log(position=position, temperature_c=20, user=self.user)
+        position.is_active = False
+        position.save()
+
+        self.assertEqual(get_environmental_summary(), [])

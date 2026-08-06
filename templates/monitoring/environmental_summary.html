@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Environmental Summary — Screen House Guardian{% endblock %}
+
+{% block extra_style %}
+.sv-heading { margin-bottom: 1.25rem; }
+.sv-heading h2 { margin: 0 0 0.25rem; font-size: 1.4rem; }
+.sv-heading p  { margin: 0; color: #666; font-size: 0.9rem; }
+
+.sv-table-wrap { overflow-x: auto; margin-bottom: 2rem; }
+.sv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+.sv-table th {
+  background: #f1f8e9;
+  color: #2e7d32;
+  text-align: left;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border-bottom: 1px solid #ddd;
+}
+.sv-table td {
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+.sv-table tr:last-child td { border-bottom: none; }
+.empty-state {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #888;
+  font-size: 0.95rem;
+}
+.back-link {
+  display: inline-block;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: #555;
+  text-decoration: none;
+}
+.back-link:hover { text-decoration: underline; }
+{% endblock %}
+
+{% block content %}
+<div class="sv-heading">
+  <h2>Environmental Summary</h2>
+  <p>Per-position averages across all recorded environmental readings, grouped by site / screen house / bench / position.</p>
+</div>
+
+{% if summary %}
+<div class="sv-table-wrap">
+  <table class="sv-table">
+    <thead>
+      <tr>
+        <th>Site</th>
+        <th>Screen House</th>
+        <th>Bench</th>
+        <th>Position</th>
+        <th>Avg Temp (°C)</th>
+        <th>Avg Humidity (%)</th>
+        <th>Max Light (lux)</th>
+        <th>Readings</th>
+        <th>Last recorded</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in summary %}
+      <tr>
+        <td>{{ row.position.bench.screen_house.site.name }}</td>
+        <td>{{ row.position.bench.screen_house.name }}</td>
+        <td>{{ row.position.bench.name }}</td>
+        <td>{{ row.position.code }}</td>
+        <td>{{ row.avg_temperature_c|default:"—" }}</td>
+        <td>{{ row.avg_humidity_pct|default:"—" }}</td>
+        <td>{{ row.max_light_lux|default:"—" }}</td>
+        <td>{{ row.reading_count }}</td>
+        <td>{{ row.last_recorded_at|date:"Y-m-d H:i" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state"><p>No environmental readings recorded against a position yet.</p></div>
+{% endif %}
+
+<a class="back-link" href="{% url 'monitoring:environmental_log_list' %}">&larr; Back to environmental logs</a>
+{% endblock %}

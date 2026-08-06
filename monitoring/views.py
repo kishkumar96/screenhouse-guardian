@@ -29,6 +29,7 @@ from .services import (
     create_daily_round_with_items,
     get_weekly_summary,
     mark_overdue_rounds_missed,
+    get_environmental_summary,
     record_distribution,
     record_environmental_log,
     record_propagation,
@@ -700,4 +701,11 @@ def environmental_log_list(request):
     )
     return render(request, 'monitoring/environmental_log_list.html', {
         'logs': logs,
+    })
+
+
+@observer_required
+def environmental_summary(request):
+    return render(request, 'monitoring/environmental_summary.html', {
+        'summary': get_environmental_summary(),
     })

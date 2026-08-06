@@ -2,10 +2,10 @@ from datetime import datetime, time as dt_time, timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models import Avg, Count, Max, OuterRef, Q, Subquery
 from django.utils import timezone
 
-from inventory.models import TrackingUnit
+from inventory.models import Position, TrackingUnit
 
 from .models import (
     DailyRound, DailyRoundItem, DistributionEvent, EnvironmentalLog, Observation, PropagationEvent,
@@ -463,3 +463,50 @@ def record_environmental_log(
     log.full_clean()
     log.save()
     return log
+
+
+def get_environmental_summary():
+    """
+    For each active Position with at least one EnvironmentalLog, aggregate
+    average temperature/humidity, peak light, reading count, and the most
+    recent reading time.
+
+    Returns a list of dicts: position, avg_temperature_c, avg_humidity_pct,
+    max_light_lux, reading_count, last_recorded_at. Positions with no
+    readings are omitted.
+    """
+    positions = (
+        Position.objects.filter(is_active=True)
+        .select_related('bench__screen_house__site')
+        .order_by(
+            'bench__screen_house__site__name', 'bench__screen_house__name', 'bench__name', 'code',
+        )
+    )
+
+    summary = []
+    for position in positions:
+        stats = position.environmental_logs.aggregate(
+            avg_temperature_c=Avg('temperature_c'),
+            avg_humidity_pct=Avg('humidity_pct'),
+            max_light_lux=Max('light_lux'),
+            reading_count=Count('id'),
+            last_recorded_at=Max('recorded_at'),
+        )
+        if not stats['reading_count']:
+            continue
+
+        summary.append({
+            'position': position,
+            'avg_temperature_c': (
+                round(stats['avg_temperature_c'], 1)
+                if stats['avg_temperature_c'] is not None else None
+            ),
+            'avg_humidity_pct': (
+                round(stats['avg_humidity_pct'], 1)
+                if stats['avg_humidity_pct'] is not None else None
+            ),
+            'max_light_lux': stats['max_light_lux'],
+            'reading_count': stats['reading_count'],
+            'last_recorded_at': stats['last_recorded_at'],
+        })
+    return summary
