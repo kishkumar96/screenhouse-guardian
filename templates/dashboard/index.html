@@ -256,6 +256,7 @@
     {% endif %}
     <a href="{% url 'monitoring:round_list' %}" class="dash-action-btn secondary">Daily rounds</a>
     <a href="{% url 'monitoring:follow_up_list' %}" class="dash-action-btn secondary">Follow-ups</a>
+    <a href="{% url 'monitoring:environmental_log_list' %}" class="dash-action-btn secondary">Environmental logs</a>
     {% if show_manager_links %}
       <a href="{% url 'monitoring:weekly_report' %}" class="dash-action-btn secondary">Weekly report</a>
       <a href="{% url 'monitoring:reconcile_inventory' %}" class="dash-action-btn secondary">Reconcile inventory</a>

@@ -21,4 +21,7 @@ urlpatterns = [
     path('reports/weekly/', views.weekly_report, name='weekly_report'),
     # Inventory reconciliation
     path('reconcile/', views.reconcile_inventory, name='reconcile_inventory'),
+    # Environmental logs
+    path('environmental-logs/', views.environmental_log_list, name='environmental_log_list'),
+    path('environmental-logs/record/', views.record_environmental_log_view, name='record_environmental_log'),
 ]

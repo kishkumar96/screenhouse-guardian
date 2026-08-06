@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from django.contrib.auth import get_user_model
 
-from inventory.models import TrackingUnit
+from inventory.models import Position, TrackingUnit
 
 from .models import DailyRound, Observation, ObservationPhoto, PropagationEvent, QuantityEvent, Treatment
 
@@ -408,3 +408,51 @@ class DailyRoundEditForm(forms.ModelForm):
         widgets = {
             'notes': forms.Textarea(attrs={'rows': 3}),
         }
+
+
+class EnvironmentalLogForm(forms.Form):
+
+    position = forms.ModelChoiceField(
+        queryset=Position.objects.filter(is_active=True).select_related(
+            'bench', 'bench__screen_house', 'bench__screen_house__site',
+        ),
+        required=False,
+        label='Position',
+        help_text='Optional. Leave blank if this reading is not tied to a specific position.',
+    )
+    temperature_c = forms.DecimalField(
+        required=False,
+        max_digits=5,
+        decimal_places=2,
+        label='Temperature (°C)',
+    )
+    humidity_pct = forms.DecimalField(
+        required=False,
+        max_digits=5,
+        decimal_places=2,
+        min_value=0,
+        max_value=100,
+        label='Humidity (%)',
+    )
+    light_lux = forms.IntegerField(
+        required=False,
+        min_value=0,
+        label='Light (lux)',
+    )
+    notes = forms.CharField(
+        required=False,
+        label='Notes',
+        widget=forms.Textarea(attrs={'rows': 3}),
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        if (
+            cleaned.get('temperature_c') is None
+            and cleaned.get('humidity_pct') is None
+            and cleaned.get('light_lux') is None
+        ):
+            raise forms.ValidationError(
+                'Enter at least one of temperature, humidity, or light.'
+            )
+        return cleaned

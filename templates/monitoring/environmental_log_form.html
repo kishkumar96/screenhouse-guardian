@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Record Environmental Reading — Screen House Guardian{% endblock %}
+
+{% block extra_style %}
+.dx-form-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+.form-group { margin-bottom: 1rem; }
+.form-group label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+.form-group textarea { resize: vertical; }
+.form-group .errorlist {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0;
+  color: #c62828;
+  font-size: 0.85rem;
+}
+.non-field-errors {
+  background: #fce4ec;
+  border: 1px solid #e91e63;
+  color: #880e4f;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+.submit-btn {
+  display: block;
+  width: 100%;
+  padding: 0.9rem;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 1rem;
+}
+.submit-btn:hover { background: #1b5e20; }
+.back-link {
+  display: inline-block;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: #555;
+  text-decoration: none;
+}
+.back-link:hover { text-decoration: underline; }
+{% endblock %}
+
+{% block content %}
+<h2>Record Environmental Reading</h2>
+
+{% if form.non_field_errors %}
+<div class="non-field-errors">
+  {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+</div>
+{% endif %}
+
+<form method="post" novalidate>
+  {% csrf_token %}
+
+  <div class="dx-form-card">
+    <div class="form-group">
+      <label for="{{ form.position.id_for_label }}">Position</label>
+      {{ form.position }}
+      {% if form.position.errors %}
+      <ul class="errorlist">{% for e in form.position.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+
+    <div class="form-group">
+      <label for="{{ form.temperature_c.id_for_label }}">Temperature (°C)</label>
+      {{ form.temperature_c }}
+      {% if form.temperature_c.errors %}
+      <ul class="errorlist">{% for e in form.temperature_c.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+
+    <div class="form-group">
+      <label for="{{ form.humidity_pct.id_for_label }}">Humidity (%)</label>
+      {{ form.humidity_pct }}
+      {% if form.humidity_pct.errors %}
+      <ul class="errorlist">{% for e in form.humidity_pct.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+
+    <div class="form-group">
+      <label for="{{ form.light_lux.id_for_label }}">Light (lux)</label>
+      {{ form.light_lux }}
+      {% if form.light_lux.errors %}
+      <ul class="errorlist">{% for e in form.light_lux.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+
+    <div class="form-group">
+      <label for="{{ form.notes.id_for_label }}">Notes</label>
+      {{ form.notes }}
+    </div>
+  </div>
+
+  <button type="submit" class="submit-btn">Save reading</button>
+</form>
+
+<a class="back-link" href="{% url 'monitoring:environmental_log_list' %}">&larr; Back to environmental logs</a>
+{% endblock %}

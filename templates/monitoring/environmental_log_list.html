@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Environmental Logs — Screen House Guardian{% endblock %}
+
+{% block extra_style %}
+.rc-heading { margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 0.75rem; }
+.rc-heading h2 { margin: 0 0 0.25rem; font-size: 1.4rem; }
+.rc-heading p  { margin: 0; color: #666; font-size: 0.9rem; }
+.rc-add-btn {
+  padding: 0.55rem 1.1rem;
+  background: #2e7d32;
+  color: #fff;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+.rc-add-btn:hover { background: #1b5e20; }
+.rc-table-wrap { overflow-x: auto; }
+.rc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+.rc-table th {
+  background: #f1f8e9;
+  color: #2e7d32;
+  text-align: left;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border-bottom: 1px solid #ddd;
+}
+.rc-table td {
+  padding: 0.5rem 0.85rem;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+.rc-table tr:last-child td { border-bottom: none; }
+.empty-state {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: #888;
+  font-size: 0.95rem;
+}
+{% endblock %}
+
+{% block content %}
+<div class="rc-heading">
+  <div>
+    <h2>Environmental Logs</h2>
+    <p>Most recent 200 temperature/humidity/light readings.</p>
+  </div>
+  <a href="{% url 'monitoring:record_environmental_log' %}" class="rc-add-btn">Record reading</a>
+</div>
+
+{% if logs %}
+<div class="rc-table-wrap">
+  <table class="rc-table">
+    <thead>
+      <tr>
+        <th>Recorded</th>
+        <th>Position</th>
+        <th>Temp (°C)</th>
+        <th>Humidity (%)</th>
+        <th>Light (lux)</th>
+        <th>Recorded by</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for log in logs %}
+      <tr>
+        <td>{{ log.recorded_at|date:"Y-m-d H:i" }}</td>
+        <td>{{ log.position|default:"—" }}</td>
+        <td>{{ log.temperature_c|default:"—" }}</td>
+        <td>{{ log.humidity_pct|default:"—" }}</td>
+        <td>{{ log.light_lux|default:"—" }}</td>
+        <td>{{ log.recorded_by|default:"—" }}</td>
+        <td>{{ log.notes|default:"—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">
+  <p>No environmental readings recorded yet.</p>
+</div>
+{% endif %}
+{% endblock %}

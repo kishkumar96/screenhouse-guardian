@@ -12,6 +12,7 @@ from .forms import (
     DailyRoundCreateForm,
     DailyRoundEditForm,
     DistributionEventForm,
+    EnvironmentalLogForm,
     ObservationForm,
     ObservationPhotoForm,
     PropagationEventForm,
@@ -20,7 +21,8 @@ from .forms import (
     TreatmentOutcomeForm,
 )
 from .models import (
-    DailyRound, DailyRoundItem, MAX_OBSERVATION_IMAGE_SIZE_MB, Observation, QuantityEvent, Treatment,
+    DailyRound, DailyRoundItem, EnvironmentalLog, MAX_OBSERVATION_IMAGE_SIZE_MB, Observation, QuantityEvent,
+    Treatment,
 )
 from .services import (
     apply_quantity_event,
@@ -28,6 +30,7 @@ from .services import (
     get_weekly_summary,
     mark_overdue_rounds_missed,
     record_distribution,
+    record_environmental_log,
     record_propagation,
     update_daily_round_status,
 )
@@ -661,4 +664,40 @@ def reconcile_inventory(request):
         'units': units,
         'location_filter': location_filter,
         'results': results,
+    })
+
+
+@observer_required
+def record_environmental_log_view(request):
+    if request.method == 'POST':
+        form = EnvironmentalLogForm(request.POST)
+        if form.is_valid():
+            record_environmental_log(
+                position=form.cleaned_data['position'],
+                temperature_c=form.cleaned_data['temperature_c'],
+                humidity_pct=form.cleaned_data['humidity_pct'],
+                light_lux=form.cleaned_data['light_lux'],
+                notes=form.cleaned_data['notes'],
+                user=request.user,
+            )
+            messages.success(request, 'Environmental reading recorded.')
+            return redirect('monitoring:environmental_log_list')
+    else:
+        form = EnvironmentalLogForm()
+
+    return render(request, 'monitoring/environmental_log_form.html', {
+        'form': form,
+    })
+
+
+@observer_required
+def environmental_log_list(request):
+    logs = (
+        EnvironmentalLog.objects.select_related(
+            'position__bench__screen_house__site', 'recorded_by',
+        )
+        .order_by('-recorded_at')[:200]
+    )
+    return render(request, 'monitoring/environmental_log_list.html', {
+        'logs': logs,
     })

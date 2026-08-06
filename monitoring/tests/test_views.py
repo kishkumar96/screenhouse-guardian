@@ -7,8 +7,10 @@ from django.test import TestCase, override_settings
 
 import datetime
 
-from inventory.models import TrackingUnit
-from monitoring.models import MAX_OBSERVATION_IMAGE_SIZE_BYTES, Observation, ObservationPhoto, QuantityEvent, Treatment
+from inventory.models import Bench, Position, ScreenHouse, Site, TrackingUnit
+from monitoring.models import (
+    EnvironmentalLog, MAX_OBSERVATION_IMAGE_SIZE_BYTES, Observation, ObservationPhoto, QuantityEvent, Treatment,
+)
 
 User = get_user_model()
 
@@ -2212,3 +2214,69 @@ class ReconcileInventoryPostTest(TestCase):
         self.client.login(username='rc_post_obs', password=_PASSWORD)
         response = self.client.post('/monitoring/reconcile/', {f'qty_{self.unit.pk}': '5'})
         self.assertEqual(response.status_code, 403)
+
+
+def make_position(code='POS-VIEW-001'):
+    site = Site.objects.create(name=f'Site for {code}')
+    sh = ScreenHouse.objects.create(site=site, name='SH1')
+    bench = Bench.objects.create(screen_house=sh, name='Bench A')
+    return Position.objects.create(bench=bench, code=code)
+
+
+class EnvironmentalLogAccessTest(TestCase):
+
+    def setUp(self):
+        make_observer(username='env_obs_access')
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.get('/monitoring/environmental-logs/record/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+    def test_observer_gets_200_on_record_form(self):
+        self.client.login(username='env_obs_access', password=_PASSWORD)
+        response = self.client.get('/monitoring/environmental-logs/record/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_observer_gets_200_on_list(self):
+        self.client.login(username='env_obs_access', password=_PASSWORD)
+        response = self.client.get('/monitoring/environmental-logs/')
+        self.assertEqual(response.status_code, 200)
+
+
+class EnvironmentalLogPostTest(TestCase):
+
+    def setUp(self):
+        make_observer(username='env_obs_post')
+        self.client.login(username='env_obs_post', password=_PASSWORD)
+        self.position = make_position('POS-VIEW-POST-001')
+
+    def _post(self, **overrides):
+        data = {
+            'position': str(self.position.pk),
+            'temperature_c': '24.5',
+            'humidity_pct': '60',
+            'light_lux': '1200',
+            'notes': '',
+        }
+        data.update(overrides)
+        return self.client.post('/monitoring/environmental-logs/record/', data)
+
+    def test_valid_post_creates_log(self):
+        self._post()
+        self.assertEqual(EnvironmentalLog.objects.filter(position=self.position).count(), 1)
+
+    def test_valid_post_redirects_to_list(self):
+        response = self._post()
+        self.assertRedirects(response, '/monitoring/environmental-logs/')
+
+    def test_no_readings_is_rejected(self):
+        response = self._post(temperature_c='', humidity_pct='', light_lux='')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(EnvironmentalLog.objects.count(), 0)
+
+    def test_position_is_optional(self):
+        response = self._post(position='')
+        self.assertRedirects(response, '/monitoring/environmental-logs/')
+        log = EnvironmentalLog.objects.get()
+        self.assertIsNone(log.position)
