@@ -18,6 +18,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env(
     DEBUG=(bool, True),
     ALLOWED_HOSTS=(list, ['localhost', '127.0.0.1']),
+    CSRF_TRUSTED_ORIGINS=(list, []),
 )
 
 environ.Env.read_env(BASE_DIR / '.env')
@@ -36,6 +37,7 @@ SECRET_KEY = env(
 DEBUG = env('DEBUG')
 
 ALLOWED_HOSTS = env('ALLOWED_HOSTS')
+CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS')
 
 # ── Applications ──────────────────────────────────────────────────────────────
 
@@ -118,9 +120,44 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# CompressedManifestStaticFilesStorage requires collectstatic to have run
+# (it reads a JSON manifest for cache-busted filenames) — only safe once
+# DEBUG=False, i.e. in an image that ran collectstatic at build time.
+# Local dev/test use the plain storage so `{% static %}` works unmodified.
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': (
+            'whitenoise.storage.CompressedManifestStaticFilesStorage'
+            if not DEBUG else
+            'django.contrib.staticfiles.storage.StaticFilesStorage'
+        ),
+    },
+}
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# ── Production hardening ────────────────────────────────────────────────────
+# Only applied when DEBUG=False, so local development is unaffected.
+# Assumes the app sits behind a TLS-terminating proxy/load balancer that
+# sets X-Forwarded-Proto (true for most PaaS providers and typical nginx
+# reverse-proxy setups) — adjust SECURE_PROXY_SSL_HEADER if that's not the case.
+
+if not DEBUG:
+    MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
+
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 7  # 1 week; raise once HTTPS is confirmed stable
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 
 # ── Misc ──────────────────────────────────────────────────────────────────────
 

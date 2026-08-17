@@ -5,6 +5,10 @@
 Django>=5.2,<6.0
 djangorestframework>=3.15
 
+# Production WSGI server + static file serving (no nginx required)
+gunicorn>=21.2
+whitenoise>=6.6
+
 # Database adapter — psycopg2-binary for broad compatibility
 # Switch to psycopg[binary]>=3.1 (psycopg3) when upgrading to async or Django 5.x async views
 psycopg2-binary>=2.9

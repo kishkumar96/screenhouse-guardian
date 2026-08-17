@@ -28,6 +28,7 @@ collected_static/
 .env
 .env.local
 .env.*.local
+.env.production
 
 # Media uploads — served separately in production
 media/
