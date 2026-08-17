@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models import Avg, Count, Max, OuterRef, Q, Subquery
 from django.utils import timezone
 
-from inventory.models import Position, TrackingUnit
+from inventory.models import Bench, Position, TrackingUnit
 
 from .models import (
     DailyRound, DailyRoundItem, DistributionEvent, EnvironmentalLog, Observation, PropagationEvent,
@@ -603,3 +603,60 @@ def get_environmental_layout():
             screen_houses.append({'screen_house': sh_entry['screen_house'], 'benches': benches})
         result.append({'site': site_entry['site'], 'screen_houses': screen_houses})
     return result
+
+
+_CONCERN_STATUSES = [Observation.STATUS_WATCH, Observation.STATUS_SICK, Observation.STATUS_CRITICAL]
+
+
+def get_environmental_health_correlation():
+    """
+    For each active Bench with both environmental readings and observations
+    (via tracking units located at its positions), compare average
+    temperature/humidity against the rate of watch/sick/critical
+    observations, to see whether this bench's environment tracks with plant
+    health outcomes.
+
+    All-time aggregation (not windowed) — kept simple to match the existing
+    survival-analytics style. Returns a list of dicts: bench,
+    avg_temperature_c, avg_humidity_pct, observation_count, concern_count,
+    concern_rate (percentage, 1 decimal). Benches with no environmental
+    readings or no observations are omitted.
+    """
+    benches = (
+        Bench.objects.filter(is_active=True)
+        .select_related('screen_house__site')
+        .order_by('screen_house__site__name', 'screen_house__name', 'name')
+    )
+
+    results = []
+    for bench in benches:
+        env_stats = EnvironmentalLog.objects.filter(position__bench=bench).aggregate(
+            avg_temperature_c=Avg('temperature_c'),
+            avg_humidity_pct=Avg('humidity_pct'),
+            reading_count=Count('id'),
+        )
+        if not env_stats['reading_count']:
+            continue
+
+        observations = Observation.objects.filter(tracking_unit__position__bench=bench)
+        observation_count = observations.count()
+        if not observation_count:
+            continue
+
+        concern_count = observations.filter(status__in=_CONCERN_STATUSES).count()
+
+        results.append({
+            'bench': bench,
+            'avg_temperature_c': (
+                round(env_stats['avg_temperature_c'], 1)
+                if env_stats['avg_temperature_c'] is not None else None
+            ),
+            'avg_humidity_pct': (
+                round(env_stats['avg_humidity_pct'], 1)
+                if env_stats['avg_humidity_pct'] is not None else None
+            ),
+            'observation_count': observation_count,
+            'concern_count': concern_count,
+            'concern_rate': round(concern_count / observation_count * 100, 1),
+        })
+    return results

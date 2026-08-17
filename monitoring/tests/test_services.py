@@ -13,6 +13,7 @@ from monitoring.models import (
 from monitoring.services import (
     apply_quantity_event,
     create_daily_round_with_items,
+    get_environmental_health_correlation,
     get_environmental_layout,
     get_environmental_summary,
     get_units_for_round_generation,
@@ -977,3 +978,66 @@ class GetEnvironmentalLayoutTest(TestCase):
         make_position('POS-LAY-002')
 
         self.assertEqual(get_environmental_layout(), [])
+
+
+class GetEnvironmentalHealthCorrelationTest(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username='env-corr-user',
+            password='test-password-123',
+        )
+
+    def _make_unit_at(self, unit_code, position):
+        return TrackingUnit.objects.create(
+            unit_code=unit_code,
+            unit_type=TrackingUnit.UNIT_TYPE_CONTAINER,
+            crop_name='Test Crop',
+            quantity=10,
+            position=position,
+        )
+
+    def test_bench_with_readings_and_observations_is_included(self):
+        position = make_position('POS-CORR-001')
+        unit = self._make_unit_at('TU-CORR-001', position)
+        record_environmental_log(position=position, temperature_c=30, humidity_pct=80, user=self.user)
+        Observation.objects.create(tracking_unit=unit, status=Observation.STATUS_HEALTHY)
+
+        results = get_environmental_health_correlation()
+
+        self.assertEqual(len(results), 1)
+        row = results[0]
+        self.assertEqual(row['bench'], position.bench)
+        self.assertEqual(row['avg_temperature_c'], 30)
+        self.assertEqual(row['avg_humidity_pct'], 80)
+        self.assertEqual(row['observation_count'], 1)
+        self.assertEqual(row['concern_count'], 0)
+        self.assertEqual(row['concern_rate'], 0)
+
+    def test_concern_rate_counts_watch_sick_critical(self):
+        position = make_position('POS-CORR-002')
+        unit = self._make_unit_at('TU-CORR-002', position)
+        record_environmental_log(position=position, temperature_c=35, user=self.user)
+        Observation.objects.create(tracking_unit=unit, status=Observation.STATUS_HEALTHY)
+        Observation.objects.create(tracking_unit=unit, status=Observation.STATUS_WATCH)
+        Observation.objects.create(tracking_unit=unit, status=Observation.STATUS_SICK)
+        Observation.objects.create(tracking_unit=unit, status=Observation.STATUS_CRITICAL)
+
+        row = get_environmental_health_correlation()[0]
+
+        self.assertEqual(row['observation_count'], 4)
+        self.assertEqual(row['concern_count'], 3)
+        self.assertEqual(row['concern_rate'], 75)
+
+    def test_bench_with_readings_but_no_observations_is_excluded(self):
+        position = make_position('POS-CORR-003')
+        record_environmental_log(position=position, temperature_c=24, user=self.user)
+
+        self.assertEqual(get_environmental_health_correlation(), [])
+
+    def test_bench_with_observations_but_no_readings_is_excluded(self):
+        position = make_position('POS-CORR-004')
+        unit = self._make_unit_at('TU-CORR-004', position)
+        Observation.objects.create(tracking_unit=unit, status=Observation.STATUS_HEALTHY)
+
+        self.assertEqual(get_environmental_health_correlation(), [])

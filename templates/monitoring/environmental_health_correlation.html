@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Environmental / Health Correlation — Screen House Guardian{% endblock %}
+
+{% block extra_style %}
+.sv-heading { margin-bottom: 1.25rem; }
+.sv-heading h2 { margin: 0 0 0.25rem; font-size: 1.4rem; }
+.sv-heading p  { margin: 0; color: #666; font-size: 0.9rem; }
+
+.sv-table-wrap { overflow-x: auto; margin-bottom: 2rem; }
+.sv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+.sv-table th {
+  background: #f1f8e9;
+  color: #2e7d32;
+  text-align: left;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border-bottom: 1px solid #ddd;
+}
+.sv-table td {
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+.sv-table tr:last-child td { border-bottom: none; }
+.sv-rate {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+.sv-rate-high { background: #ffcdd2; color: #b71c1c; }
+.sv-rate-mid  { background: #fff9c4; color: #f57f17; }
+.sv-rate-low  { background: #c8e6c9; color: #1b5e20; }
+.empty-state {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #888;
+  font-size: 0.95rem;
+}
+.back-link { display: inline-block; margin-top: 1rem; font-size: 0.85rem; color: #555; text-decoration: none; }
+.back-link:hover { text-decoration: underline; }
+.caveat {
+  font-size: 0.82rem;
+  color: #666;
+  background: #f9fbe7;
+  border: 1px solid #e6ee9c;
+  border-radius: 4px;
+  padding: 0.55rem 0.85rem;
+  margin-bottom: 1rem;
+}
+{% endblock %}
+
+{% block content %}
+<div class="sv-heading">
+  <h2>Environmental / Health Correlation</h2>
+  <p>Per-bench average temperature/humidity against the share of observations flagged watch, sick, or critical. All-time, not a time-windowed comparison.</p>
+</div>
+
+<p class="caveat">
+  This shows association, not causation — a high concern rate on a bench may reflect the environment,
+  the crops grown there, or something else entirely. Use it to decide where to look closer, not as a
+  final diagnosis.
+</p>
+
+{% if correlation %}
+<div class="sv-table-wrap">
+  <table class="sv-table">
+    <thead>
+      <tr>
+        <th>Site</th>
+        <th>Screen House</th>
+        <th>Bench</th>
+        <th>Avg Temp (°C)</th>
+        <th>Avg Humidity (%)</th>
+        <th>Observations</th>
+        <th>Watch/Sick/Critical</th>
+        <th>Concern rate</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in correlation %}
+      <tr>
+        <td>{{ row.bench.screen_house.site.name }}</td>
+        <td>{{ row.bench.screen_house.name }}</td>
+        <td>{{ row.bench.name }}</td>
+        <td>{{ row.avg_temperature_c|default:"—" }}</td>
+        <td>{{ row.avg_humidity_pct|default:"—" }}</td>
+        <td>{{ row.observation_count }}</td>
+        <td>{{ row.concern_count }}</td>
+        <td>
+          {% if row.concern_rate >= 40 %}
+          <span class="sv-rate sv-rate-high">{{ row.concern_rate }}%</span>
+          {% elif row.concern_rate >= 15 %}
+          <span class="sv-rate sv-rate-mid">{{ row.concern_rate }}%</span>
+          {% else %}
+          <span class="sv-rate sv-rate-low">{{ row.concern_rate }}%</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state"><p>No bench yet has both environmental readings and observations to compare.</p></div>
+{% endif %}
+
+<a class="back-link" href="{% url 'monitoring:environmental_log_list' %}">&larr; Back to environmental logs</a>
+{% endblock %}

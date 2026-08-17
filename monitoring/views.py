@@ -29,6 +29,7 @@ from .services import (
     create_daily_round_with_items,
     get_weekly_summary,
     mark_overdue_rounds_missed,
+    get_environmental_health_correlation,
     get_environmental_layout,
     get_environmental_summary,
     record_distribution,
@@ -716,4 +717,11 @@ def environmental_summary(request):
 def environmental_layout(request):
     return render(request, 'monitoring/environmental_layout.html', {
         'layout': get_environmental_layout(),
+    })
+
+
+@observer_required
+def environmental_health_correlation(request):
+    return render(request, 'monitoring/environmental_health_correlation.html', {
+        'correlation': get_environmental_health_correlation(),
     })
